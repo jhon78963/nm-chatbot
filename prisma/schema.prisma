@@ -77,6 +77,15 @@ model Size {
   @@map("sizes")
 }
 
+model Color {
+  id          String @id @default(uuid())
+  description String @db.VarChar(100)
+
+  productSizeColors ProductSizeColor[]
+
+  @@map("colors")
+}
+
 model ProductSize {
   id            String    @id @default(uuid())
   productId     String    @map("product_id")
@@ -88,9 +97,22 @@ model ProductSize {
   product           Product            @relation(fields: [productId], references: [id])
   size              Size               @relation(fields: [sizeId], references: [id])
   inventoryBalances InventoryBalance[]
+  productSizeColors ProductSizeColor[]
 
   @@unique([productId, sizeId])
   @@map("product_size")
+}
+
+model ProductSizeColor {
+  id            String @id @default(uuid())
+  productSizeId String @map("product_size_id")
+  colorId       String @map("color_id")
+
+  productSize ProductSize @relation(fields: [productSizeId], references: [id], onDelete: Cascade)
+  color       Color       @relation(fields: [colorId], references: [id])
+
+  @@unique([productSizeId, colorId])
+  @@map("product_size_color")
 }
 
 model InventoryBalance {
@@ -262,4 +284,51 @@ model ChatTokenBlacklist {
 
   @@index([expiresAt])
   @@map("chat_token_blacklist")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ERP — Modelos mínimos requeridos por create-nm-agents.mjs
+// (lee admin users del ERP para mapearlos a chat_agents)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+model User {
+  id          String    @id @default(uuid())
+  username    String    @unique @db.VarChar(100)
+  email       String    @unique @db.VarChar(255)
+  name        String    @db.VarChar(100)
+  surname     String    @db.VarChar(100)
+  phone       String?   @db.VarChar(20)
+  isEnabled   Boolean   @default(true) @map("is_enabled")
+  isDeleted   Boolean   @default(false) @map("is_deleted")
+  tenantId    String    @map("tenant_id")
+  warehouseId String?   @map("warehouse_id")
+  createdAt   DateTime  @default(now()) @map("creation_time")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  userRoles UserRole[]
+
+  @@map("users")
+}
+
+model Role {
+  id        String  @id @default(uuid())
+  name      String  @db.VarChar(100)
+  guardName String  @default("api") @map("guard_name")
+  tenantId  String? @map("tenant_id")
+
+  userRoles UserRole[]
+
+  @@unique([name, tenantId])
+  @@map("roles")
+}
+
+model UserRole {
+  userId String @map("user_id")
+  roleId String @map("role_id")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
 }

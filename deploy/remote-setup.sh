@@ -8,7 +8,7 @@
 set -euo pipefail
 
 DOMAIN="${DOMAIN:-chatbot.uprit.edu.pe}"
-REPO_URL="${REPO_URL:-https://github.com/jhon-livias/chatbot.git}"
+REPO_URL="${REPO_URL:-https://github.com/jhon78963/nm-chatbot.git}"
 REMOTE_DIR="${REMOTE_DIR:-/opt/chatbot-uprit}"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-soporte@uprit.edu.pe}"
 REPO_BRANCH="${REPO_BRANCH:-main}"
