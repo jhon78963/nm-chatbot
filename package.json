@@ -10,9 +10,12 @@
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "prepare:prisma": "prisma generate --schema=./prisma/schema.prisma",
+    "prepare:prisma": "prisma generate --schema=./prisma/schema.prisma && prisma generate --schema=./prisma/catalog.schema.prisma",
     "postinstall": "npm run prepare:prisma",
     "build": "npm run prepare:prisma && tsc --project tsconfig.json",
+    "migrate:dev": "prisma migrate dev --schema=./prisma/schema.prisma",
+    "migrate:deploy": "prisma migrate deploy --schema=./prisma/schema.prisma",
+    "db:push": "prisma db push --schema=./prisma/schema.prisma",
     "build:watch": "tsc --project tsconfig.json --watch",
     "start": "node --env-file=.env dist/main.js",
     "dev": "npm run build && node --env-file=.env --watch dist/main.js",

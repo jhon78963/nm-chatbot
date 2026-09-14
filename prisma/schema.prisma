@@ -1,7 +1,7 @@
 // =============================================================================
-// Prisma Schema — nm-chatbot (standalone)
-// Solo los modelos necesarios para el servicio de chatbot.
-// Extraído del monorepo nm-backend/libs/database/prisma/schema.prisma
+// Prisma Schema — nm-chatbot (base de datos propia)
+// Solo los modelos del chatbot. Apunta a CHATBOT_DATABASE_URL (chatbot_db).
+// Para migraciones propias: npm run migrate:dev
 // =============================================================================
 
 generator client {
@@ -11,121 +11,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// CATÁLOGO — Solo los modelos mínimos usados por ProductToolsService
-// (product-tools.service.ts consulta productos, tallas, stock e imágenes)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-model Gender {
-  id       String    @id @default(uuid())
-  name     String    @db.VarChar(50)
-  products Product[]
-
-  @@map("genders")
-}
-
-model Product {
-  id                 String   @id @default(uuid())
-  name               String   @db.VarChar(255)
-  description        String?
-  shortDescription   String?  @map("short_description")
-  barcode            String?  @db.VarChar(50)
-  percentageDiscount String?  @map("percentage_discount") @db.VarChar(20)
-  isFeatured         Boolean  @default(false) @map("is_featured")
-  isOnSale           Boolean  @default(false) @map("is_on_sale")
-  isNew              Boolean  @default(false) @map("is_new")
-  status             String   @default("active")
-  genderId           String   @map("gender_id")
-  warehouseId        String   @map("warehouse_id")
-  isDeleted          Boolean  @default(false) @map("is_deleted")
-  createdAt          DateTime @default(now()) @map("creation_time")
-  updatedAt          DateTime @updatedAt @map("updated_at")
-
-  gender       Gender        @relation(fields: [genderId], references: [id])
-  productSizes ProductSize[]
-  media        ProductMedia[]
-
-  @@index([warehouseId])
-  @@index([isDeleted])
-  @@map("products")
-}
-
-model ProductMedia {
-  id        String   @id @default(uuid())
-  productId String   @map("product_id")
-  url       String
-  sortOrder Int      @default(0) @map("sort_order")
-  isCover   Boolean  @default(false) @map("is_cover")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  @@index([productId])
-  @@map("product_media")
-}
-
-model Size {
-  id          String        @id @default(uuid())
-  description String        @db.VarChar(50)
-  isDeleted   Boolean       @default(false) @map("is_deleted")
-
-  productSizes ProductSize[]
-
-  @@map("sizes")
-}
-
-model Color {
-  id          String @id @default(uuid())
-  description String @db.VarChar(100)
-
-  productSizeColors ProductSizeColor[]
-
-  @@map("colors")
-}
-
-model ProductSize {
-  id            String    @id @default(uuid())
-  productId     String    @map("product_id")
-  sizeId        String    @map("size_id")
-  barcode       String?   @db.VarChar(50)
-  salePrice     Decimal   @map("sale_price") @db.Decimal(10, 2)
-  isDeleted     Boolean   @default(false) @map("is_deleted")
-
-  product           Product            @relation(fields: [productId], references: [id])
-  size              Size               @relation(fields: [sizeId], references: [id])
-  inventoryBalances InventoryBalance[]
-  productSizeColors ProductSizeColor[]
-
-  @@unique([productId, sizeId])
-  @@map("product_size")
-}
-
-model ProductSizeColor {
-  id            String @id @default(uuid())
-  productSizeId String @map("product_size_id")
-  colorId       String @map("color_id")
-
-  productSize ProductSize @relation(fields: [productSizeId], references: [id], onDelete: Cascade)
-  color       Color       @relation(fields: [colorId], references: [id])
-
-  @@unique([productSizeId, colorId])
-  @@map("product_size_color")
-}
-
-model InventoryBalance {
-  id            String @id @default(uuid())
-  warehouseId   String @map("warehouse_id")
-  productSizeId String @map("product_size_id")
-  colorId       String @map("color_id")
-  quantity      Int    @default(0)
-
-  productSize ProductSize @relation(fields: [productSizeId], references: [id])
-
-  @@unique([warehouseId, productSizeId, colorId], name: "warehouseId_productSizeId_colorId")
-  @@map("inventory_balances")
+  url      = env("CHATBOT_DATABASE_URL")
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -284,51 +170,4 @@ model ChatTokenBlacklist {
 
   @@index([expiresAt])
   @@map("chat_token_blacklist")
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// ERP — Modelos mínimos requeridos por create-nm-agents.mjs
-// (lee admin users del ERP para mapearlos a chat_agents)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-model User {
-  id          String    @id @default(uuid())
-  username    String    @unique @db.VarChar(100)
-  email       String    @unique @db.VarChar(255)
-  name        String    @db.VarChar(100)
-  surname     String    @db.VarChar(100)
-  phone       String?   @db.VarChar(20)
-  isEnabled   Boolean   @default(true) @map("is_enabled")
-  isDeleted   Boolean   @default(false) @map("is_deleted")
-  tenantId    String    @map("tenant_id")
-  warehouseId String?   @map("warehouse_id")
-  createdAt   DateTime  @default(now()) @map("creation_time")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-
-  userRoles UserRole[]
-
-  @@map("users")
-}
-
-model Role {
-  id        String  @id @default(uuid())
-  name      String  @db.VarChar(100)
-  guardName String  @default("api") @map("guard_name")
-  tenantId  String? @map("tenant_id")
-
-  userRoles UserRole[]
-
-  @@unique([name, tenantId])
-  @@map("roles")
-}
-
-model UserRole {
-  userId String @map("user_id")
-  roleId String @map("role_id")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
-
-  @@id([userId, roleId])
-  @@map("user_roles")
 }

@@ -1,4 +1,4 @@
-import { getPrismaClient } from '../../database/prisma/prisma.client.js';
+import { getCatalogPrismaClient } from '../../database/prisma/prisma.client.js';
 import { buildProductUrl } from '../../../shared/product-slug.util.js';
 import type { EcommerceGuestCartClient } from '../../http/ecommerce-guest-cart.client.js';
 import { TOOL_NAMES } from './product-tools.definitions.js';
@@ -104,7 +104,7 @@ export class ProductToolsService {
   }
 
   private async findProductsForTool(nombre: string, categoria?: string) {
-    const prisma = getPrismaClient();
+    const prisma = getCatalogPrismaClient();
     const genderFilter = categoria
       ? {
           gender: {

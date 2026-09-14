@@ -1,4 +1,4 @@
-import { connectPrisma } from './infrastructure/database/prisma/prisma.client.js';
+import { connectPrisma, connectCatalogPrisma } from './infrastructure/database/prisma/prisma.client.js';
 import { ConversationPrismaRepository } from './infrastructure/database/prisma/repositories/conversation.prisma-repository.js';
 import { MessagePrismaRepository } from './infrastructure/database/prisma/repositories/message.prisma-repository.js';
 import { AgentPrismaRepository } from './infrastructure/database/prisma/repositories/agent.prisma-repository.js';
@@ -38,6 +38,7 @@ import { logger } from './infrastructure/shared/logger.js';
 
 async function bootstrap(): Promise<void> {
   await connectPrisma();
+  await connectCatalogPrisma();
 
   const jwtSecret = process.env['JWT_SECRET'];
   if (!jwtSecret) throw new Error('JWT_SECRET environment variable is required');

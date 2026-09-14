@@ -1,8 +1,9 @@
 # Dependencias
 node_modules/
 
-# Prisma client generado (no versionar el cliente compilado)
+# Prisma clients generados (se regeneran con npm run prepare:prisma)
 prisma/client/
+src/generated/
 
 # Compilación
 dist/

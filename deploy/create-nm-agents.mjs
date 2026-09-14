@@ -16,7 +16,7 @@
 
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'node:crypto';
-import { prisma, disconnectPrisma } from './prisma-client.mjs';
+import { prisma, catalogPrisma, disconnectPrisma } from './prisma-client.mjs';
 
 const BCRYPT_ROUNDS = 10;
 const DEFAULT_PASSWORD = process.env.NM_AGENT_PASSWORD ?? 'nm2026!';
@@ -74,7 +74,7 @@ function resolveWhatsapp(phone) {
 }
 
 async function fetchErpAdminUsers() {
-  return prisma.user.findMany({
+  return catalogPrisma.user.findMany({
     where: {
       isDeleted: false,
       isEnabled: true,
@@ -107,7 +107,7 @@ async function findLinkedAgent(admin) {
   const username = normalizeUsername(admin.username);
   const email = normalizeEmail(admin.email);
 
-  return prisma.chatAgent.findFirst({
+  return prisma.chatAgent.findFirst({  // chatbot_db
     where: {
       OR: [{ userId: admin.id }, { username }, { email }],
     },
