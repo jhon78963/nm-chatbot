@@ -10,6 +10,8 @@ import {
   resolveErpPanelUrl,
 } from '../../../application/services/erp-sso.config.js';
 import type { AgentRepository } from '../../../domain/repositories/agent.repository.js';
+import { Prisma } from '@prisma/client';
+import { loginWithAuthService } from '../erp-auth.client.js';
 import { clientIp, logAgentAudit } from '../../shared/agent-audit.logger.js';
 
 export function createAuthRouter(agentRepo: AgentRepository): Router {
@@ -75,7 +77,42 @@ export function createAuthRouter(agentRepo: AgentRepository): Router {
       return;
     }
 
+    const normalizedUsername = username.toLowerCase().trim();
+
     try {
+      // Mismas credenciales que el ERP: auth-service → JWT ERP → sesión del panel chatbot
+      const erpLogin = await loginWithAuthService(normalizedUsername, password);
+      if (erpLogin.kind === 'invalid_credentials') {
+        res.status(401).json({ error: 'Credenciales inválidas' });
+        return;
+      }
+      if (erpLogin.kind === 'success') {
+        try {
+          const result = await ssoUseCase.execute({ erpAccessToken: erpLogin.accessToken });
+          logAgentAudit({
+            action: 'login_success',
+            agentId: result.agent.id,
+            agentUsername: result.agent.username,
+            agentName: result.agent.name,
+            ip: clientIp(req),
+          });
+          res.json(result);
+          return;
+        } catch (err) {
+          if (err instanceof UnauthorizedError) {
+            logAgentAudit({
+              action: 'login_failed',
+              agentUsername: normalizedUsername,
+              detail: `erp_sso: ${err.message}`,
+              ip: clientIp(req),
+            });
+            res.status(401).json({ error: err.message });
+            return;
+          }
+          throw err;
+        }
+      }
+
       const result = await loginUseCase.execute({ username, password });
       logAgentAudit({
         action: 'login_success',
@@ -89,11 +126,24 @@ export function createAuthRouter(agentRepo: AgentRepository): Router {
       if (err instanceof UnauthorizedError) {
         logAgentAudit({
           action: 'login_failed',
-          agentUsername: username.toLowerCase().trim(),
+          agentUsername: normalizedUsername,
           detail: err.message,
           ip: clientIp(req),
         });
         res.status(401).json({ error: err.message });
+        return;
+      }
+      if (err instanceof Prisma.PrismaClientKnownRequestError) {
+        logAgentAudit({
+          action: 'login_failed',
+          agentUsername: normalizedUsername,
+          detail: err.code,
+          ip: clientIp(req),
+        });
+        res.status(503).json({
+          error:
+            'Base de datos del chatbot no inicializada. Ejecuta las migraciones del servicio chatbot.',
+        });
         return;
       }
       throw err;

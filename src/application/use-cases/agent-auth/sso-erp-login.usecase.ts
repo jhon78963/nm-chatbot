@@ -33,7 +33,7 @@ export class SsoErpLoginUseCase {
   constructor(private readonly agentRepo: AgentRepository) {}
 
   async execute(input: SsoErpLoginInput): Promise<SsoErpLoginOutput> {
-    const erpSecret = process.env['ERP_JWT_SECRET'];
+    const erpSecret = process.env['ERP_JWT_SECRET'] ?? process.env['JWT_SECRET'];
     if (!erpSecret) {
       throw new Error('ERP_JWT_SECRET not configured');
     }

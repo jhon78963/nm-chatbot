@@ -7,7 +7,6 @@ import type { Router } from 'express';
 import { authenticateAgentJwt } from './middlewares/authenticate-agent-jwt.middleware.js';
 import {
   embedOnlyAdminMiddleware,
-  redirectToErpChatbot,
 } from './middlewares/embed-only-admin.middleware.js';
 
 export interface ServerOptions {
@@ -61,19 +60,18 @@ export function createServer(
     res.json({ status: 'ok', service: 'nm-chatbot', timestamp: new Date().toISOString() });
   });
 
+  // Raíz y rutas legacy → panel de administración propio
   app.get('/', (_req, res) => {
-    redirectToErpChatbot(res);
+    res.redirect(302, '/admin');
   });
-
-  // Legacy URLs — send users to the ERP entry point.
   app.get('/login', (_req, res) => {
-    redirectToErpChatbot(res);
+    res.redirect(302, '/admin');
   });
   app.get('/chat/:id', (_req, res) => {
-    redirectToErpChatbot(res);
+    res.redirect(302, '/admin');
   });
   app.get('/chat', (_req, res) => {
-    redirectToErpChatbot(res);
+    res.redirect(302, '/admin');
   });
 
   // Admin panel React (production build at /admin)
@@ -118,8 +116,14 @@ export function createServer(
   if (chatRouter) app.use(chatRouter);
 
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+    if (err instanceof SyntaxError && 'body' in err) {
+      res.status(400).json({ error: 'JSON inválido' });
+      return;
+    }
     logger.error('[HTTP] Unhandled error', { error: err.message, stack: err.stack });
-    res.status(500).json({ error: 'Internal Server Error' });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
   });
 
   const httpServer = createHttpServer(app);
