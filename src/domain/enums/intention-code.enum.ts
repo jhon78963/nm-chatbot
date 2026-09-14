@@ -1,0 +1,13 @@
+/**
+ * Stable intent codes returned by the LLM when parsing user messages.
+ * Distinct from `type` values stored in the `funnel_intentions` collection (e.g. IDENTIFY_NEED).
+ */
+export enum IntentionCode {
+  IDENTIFICAR_INTENCION = 'IDENTIFICAR_INTENCION',
+  INFORMACION_PROGRAMAS = 'INFORMACION_PROGRAMAS',
+  PROCESO_ADMISION = 'PROCESO_ADMISION',
+  PROGRAMAS_POR_CATEGORIA = 'PROGRAMAS_POR_CATEGORIA',
+  SOLICITAR_MAS_INFORMACION = 'SOLICITAR_MAS_INFORMACION',
+  GENERAR_QUERY_EMBEDDINGS = 'GENERAR_QUERY_EMBEDDINGS',
+  RESOLVER_DUDAS = 'RESOLVER_DUDAS',
+}

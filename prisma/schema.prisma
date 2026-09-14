@@ -1,0 +1,265 @@
+// =============================================================================
+// Prisma Schema — nm-chatbot (standalone)
+// Solo los modelos necesarios para el servicio de chatbot.
+// Extraído del monorepo nm-backend/libs/database/prisma/schema.prisma
+// =============================================================================
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CATÁLOGO — Solo los modelos mínimos usados por ProductToolsService
+// (product-tools.service.ts consulta productos, tallas, stock e imágenes)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+model Gender {
+  id       String    @id @default(uuid())
+  name     String    @db.VarChar(50)
+  products Product[]
+
+  @@map("genders")
+}
+
+model Product {
+  id                 String   @id @default(uuid())
+  name               String   @db.VarChar(255)
+  description        String?
+  shortDescription   String?  @map("short_description")
+  barcode            String?  @db.VarChar(50)
+  percentageDiscount String?  @map("percentage_discount") @db.VarChar(20)
+  isFeatured         Boolean  @default(false) @map("is_featured")
+  isOnSale           Boolean  @default(false) @map("is_on_sale")
+  isNew              Boolean  @default(false) @map("is_new")
+  status             String   @default("active")
+  genderId           String   @map("gender_id")
+  warehouseId        String   @map("warehouse_id")
+  isDeleted          Boolean  @default(false) @map("is_deleted")
+  createdAt          DateTime @default(now()) @map("creation_time")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  gender       Gender        @relation(fields: [genderId], references: [id])
+  productSizes ProductSize[]
+  media        ProductMedia[]
+
+  @@index([warehouseId])
+  @@index([isDeleted])
+  @@map("products")
+}
+
+model ProductMedia {
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  url       String
+  sortOrder Int      @default(0) @map("sort_order")
+  isCover   Boolean  @default(false) @map("is_cover")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_media")
+}
+
+model Size {
+  id          String        @id @default(uuid())
+  description String        @db.VarChar(50)
+  isDeleted   Boolean       @default(false) @map("is_deleted")
+
+  productSizes ProductSize[]
+
+  @@map("sizes")
+}
+
+model ProductSize {
+  id            String    @id @default(uuid())
+  productId     String    @map("product_id")
+  sizeId        String    @map("size_id")
+  barcode       String?   @db.VarChar(50)
+  salePrice     Decimal   @map("sale_price") @db.Decimal(10, 2)
+  isDeleted     Boolean   @default(false) @map("is_deleted")
+
+  product           Product            @relation(fields: [productId], references: [id])
+  size              Size               @relation(fields: [sizeId], references: [id])
+  inventoryBalances InventoryBalance[]
+
+  @@unique([productId, sizeId])
+  @@map("product_size")
+}
+
+model InventoryBalance {
+  id            String @id @default(uuid())
+  warehouseId   String @map("warehouse_id")
+  productSizeId String @map("product_size_id")
+  colorId       String @map("color_id")
+  quantity      Int    @default(0)
+
+  productSize ProductSize @relation(fields: [productSizeId], references: [id])
+
+  @@unique([warehouseId, productSizeId, colorId], name: "warehouseId_productSizeId_colorId")
+  @@map("inventory_balances")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CHATBOT — Conversaciones, Mensajes, Agentes, Leads
+// ═══════════════════════════════════════════════════════════════════════════════
+
+model ChatConversation {
+  id                  String    @id @default(uuid())
+  userId              String    @map("user_id")
+  phoneNumber         String    @map("phone_number")
+  status              String    @default("active")
+  mode                String    @default("bot")
+  handoffState        String    @default("none") @map("handoff_state")
+  consecutiveHandoffs Int       @default(0) @map("consecutive_handoffs")
+  assignedAgentId     String?   @map("assigned_agent_id")
+  handoffAt           DateTime? @map("handoff_at")
+  handoffBy           String?   @map("handoff_by")
+  lastUserMessageAt   DateTime? @map("last_user_message_at")
+  lastAgentMessageAt  DateTime? @map("last_agent_message_at")
+  unreadCountAgent    Int       @default(0) @map("unread_count_agent")
+  currentProgramName  String?   @map("current_program_name")
+  labels              String[]  @default([])
+  pinned              Boolean   @default(false)
+  archivedAt          DateTime? @map("archived_at")
+  metaData            Json?     @map("meta_data")
+  systemPrompt        String?   @map("system_prompt")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  messages ChatMessage[]
+  agent    ChatAgent?    @relation(fields: [assignedAgentId], references: [id])
+
+  @@index([phoneNumber, status])
+  @@index([assignedAgentId, mode, status])
+  @@index([lastUserMessageAt])
+  @@map("chat_conversations")
+}
+
+model ChatMessage {
+  id             String    @id @default(uuid())
+  conversationId String    @map("conversation_id")
+  externalId     String?   @unique @map("external_id")
+  role           String
+  content        String
+  contentType    String    @default("text") @map("content_type")
+  mediaUrl       String?   @map("media_url")
+  mimeType       String?   @map("mime_type")
+  fileName       String?   @map("file_name")
+  caption        String?
+  status         String    @default("received")
+  timestamp      DateTime  @default(now())
+  deliveredAt    DateTime? @map("delivered_at")
+  readAt         DateTime? @map("read_at")
+  metadata       Json?
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, timestamp])
+  @@map("chat_messages")
+}
+
+model ChatAgent {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  name         String
+  email        String    @unique
+  whatsapp     String
+  status       String    @default("Active")
+  username     String?   @unique
+  passwordHash String?   @map("password_hash")
+  role         String    @default("agent")
+  lastLoginAt  DateTime? @map("last_login_at")
+  calendarLink String?   @map("calendar_link")
+  picture      String?
+  description  String?
+  location     String?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  conversations ChatConversation[]
+
+  @@index([status])
+  @@map("chat_agents")
+}
+
+model ChatQuickReply {
+  id        String   @id @default(uuid())
+  title     String
+  body      String
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([title])
+  @@map("chat_quick_replies")
+}
+
+model ChatFunnelUser {
+  id              String   @id @default(uuid())
+  senderId        String   @unique @map("sender_id")
+  name            String?
+  platform        String   @default("whatsapp")
+  showTerms       Boolean  @default(false) @map("show_terms")
+  stage           String   @default("AWARENESS")
+  userCategory    String   @default("first_contact") @map("user_category")
+  campaignId      String?  @map("campaign_id")
+  adId            String?  @map("ad_id")
+  utmSource       String?  @map("utm_source")
+  currentFunnelId String?  @map("current_funnel_id")
+  assignedAgent   String?  @map("assigned_agent")
+  session         Json     @default("{}")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([senderId])
+  @@index([stage])
+  @@map("chat_funnel_users")
+}
+
+model ChatLead {
+  id              String   @id @default(uuid())
+  documentType    String   @map("document_type")
+  document        String
+  name            String
+  motherLastName  String?  @map("mother_last_name")
+  fatherLastName  String?  @map("father_last_name")
+  whatsapp        String
+  email           String
+  productInterest String?  @map("product_interest")
+  source          String   @default("whatsapp")
+  platform        String   @default("whatsapp")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([whatsapp])
+  @@index([email])
+  @@map("chat_leads")
+}
+
+model ChatContextData {
+  id              String   @id @default(uuid())
+  originalId      String   @unique @map("original_id")
+  fullTextContent String   @map("full_text_content")
+  productName     String   @map("product_name")
+  updatedAt       DateTime @default(now()) @map("updated_at")
+
+  @@index([productName])
+  @@map("chat_context_data")
+}
+
+model ChatTokenBlacklist {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@map("chat_token_blacklist")
+}

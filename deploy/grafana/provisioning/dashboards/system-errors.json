@@ -1,0 +1,137 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "type": "text",
+      "title": "",
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "options": {
+        "mode": "markdown",
+        "content": "# Errores del sistema — Chatbot UPRIT\nErrores y advertencias del backend (`chatbot-uprit-app`). Actualización automática cada 30 s."
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Errores (24 h)",
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 3 },
+      "id": 1,
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({container=\"chatbot-uprit-app\", level=\"error\"}[24h]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "red" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "value" }
+    },
+    {
+      "type": "stat",
+      "title": "Advertencias (24 h)",
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 3 },
+      "id": 2,
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({container=\"chatbot-uprit-app\", level=\"warn\"}[24h]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "orange" }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "value" }
+    },
+    {
+      "type": "stat",
+      "title": "Errores (última hora)",
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 3 },
+      "id": 3,
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({container=\"chatbot-uprit-app\", level=\"error\"}[1h]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "red" }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "value" }
+    },
+    {
+      "type": "logs",
+      "title": "Errores",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 7 },
+      "id": 4,
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{container=\"chatbot-uprit-app\", level=\"error\"} | json",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      }
+    },
+    {
+      "type": "logs",
+      "title": "Advertencias",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 19 },
+      "id": 5,
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{container=\"chatbot-uprit-app\", level=\"warn\"} | json",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["chatbot", "uprit", "errors"],
+  "templating": { "list": [] },
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": {},
+  "timezone": "America/Lima",
+  "title": "Errores del sistema",
+  "uid": "uprit-system-errors",
+  "version": 1
+}

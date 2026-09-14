@@ -1,0 +1,53 @@
+[
+  {
+    "id": "nm-chatbot-admin-001",
+    "userId": "nm-chatbot-admin-001",
+    "name": "Admin NM",
+    "email": "admin@novedadesmaritex.net.pe",
+    "whatsapp": "+51999999999",
+    "status": "Active",
+    "username": "admin",
+    "role": "admin",
+    "lastLoginAt": null,
+    "calendarLink": null,
+    "picture": null,
+    "description": null,
+    "location": null,
+    "createdAt": "2026-09-03T04:39:23.561Z",
+    "updatedAt": "2026-09-03T05:16:25.989Z"
+  },
+  {
+    "id": "nm-agent-asesor-001",
+    "userId": "nm-agent-asesor-001",
+    "name": "Asesor 1 NM",
+    "email": "asesor1@novedadesmaritex.net.pe",
+    "whatsapp": "+51999999901",
+    "status": "Active",
+    "username": "asesor1.nm",
+    "role": "agent",
+    "lastLoginAt": null,
+    "calendarLink": null,
+    "picture": null,
+    "description": null,
+    "location": null,
+    "createdAt": "2026-09-03T05:16:26.051Z",
+    "updatedAt": "2026-09-03T05:16:26.051Z"
+  },
+  {
+    "id": "nm-agent-asesor-002",
+    "userId": "nm-agent-asesor-002",
+    "name": "Asesor 2 NM",
+    "email": "asesor2@novedadesmaritex.net.pe",
+    "whatsapp": "+51999999902",
+    "status": "Active",
+    "username": "asesor2.nm",
+    "role": "agent",
+    "lastLoginAt": null,
+    "calendarLink": null,
+    "picture": null,
+    "description": null,
+    "location": null,
+    "createdAt": "2026-09-03T05:16:26.059Z",
+    "updatedAt": "2026-09-03T05:16:26.059Z"
+  }
+]

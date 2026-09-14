@@ -1,0 +1,73 @@
+# =============================================================================
+# docker-compose.nm.yml — Chatbot NM (sin Grafana/Loki/Promtail)
+# Build desde raíz nm-backend-v3 (Prisma schema compartido).
+# Uso: npm run docker:nm:up  (desde services/chatbot)
+# =============================================================================
+
+name: nm-chatbot
+
+networks:
+  nm_network:
+    external: true
+    name: nm_network
+
+volumes:
+  nm_chatbot_logs:
+    name: nm_chatbot_logs
+  nm_chatbot_uploads:
+    name: nm_chatbot_uploads
+
+services:
+  app:
+    build:
+      context: ../../
+      dockerfile: services/chatbot/Dockerfile
+      target: production
+
+    container_name: nm_chatbot
+    image: nm-chatbot:latest
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    environment:
+      NODE_ENV: production
+      SERVICE_NAME: nm-chatbot
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-nm_services}
+      ECOMMERCE_SERVICE_URL: http://ecommerce-service:3012
+
+    ports:
+      - '${CHATBOT_PORT:-8090}:3000'
+
+    networks:
+      - nm_network
+
+    volumes:
+      - nm_chatbot_logs:/app/logs
+      - nm_chatbot_uploads:/app/uploads
+
+    init: true
+
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'

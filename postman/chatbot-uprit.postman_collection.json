@@ -1,0 +1,621 @@
+{
+  "info": {
+    "_postman_id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+    "name": "Chatbot UPRIT",
+    "description": "Chatbot UPRIT en producción: https://chatbot.uprit.edu.pe\n\n## Secrets (NO son lo mismo)\n- `meta_webhook_verify_token` → META_WEBHOOK_VERIFY_TOKEN (GET verify)\n- `webhook_secret` → WEBHOOK_SECRET = Meta App Secret (32 hex, POST HMAC)\n\nGenerar environment desde VPS:\n`./vps/connect.sh \"bash /opt/chatbot-uprit/deploy/generate-postman-env.sh\" > postman/chatbot-uprit.postman_environment.local.json`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "GET /health",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "",
+              "pm.test('Body status ok', () => {",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.status).to.eql('ok');",
+              "    pm.expect(json.timestamp).to.be.a('string');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "https://chatbot.uprit.edu.pe/health",
+          "protocol": "https",
+          "host": ["chatbot", "uprit", "edu", "pe"],
+          "path": ["health"]
+        },
+        "description": "Health check de producción (`chatbot.uprit.edu.pe`)."
+      },
+      "response": []
+    },
+    {
+      "name": "GET /webhook — Meta verification",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "",
+              "pm.test('Returns hub.challenge', () => {",
+              "    pm.expect(pm.response.text()).to.eql(pm.environment.get('webhook_challenge'));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "https://chatbot.uprit.edu.pe/webhook?hub.mode=subscribe&hub.verify_token={{meta_webhook_verify_token}}&hub.challenge={{webhook_challenge}}",
+          "protocol": "https",
+          "host": ["chatbot", "uprit", "edu", "pe"],
+          "path": ["webhook"],
+          "query": [
+            { "key": "hub.mode", "value": "subscribe" },
+            { "key": "hub.verify_token", "value": "{{meta_webhook_verify_token}}" },
+            { "key": "hub.challenge", "value": "{{webhook_challenge}}" }
+          ]
+        },
+        "description": "Handshake de Meta (mismo flujo que al conectar el webhook en Meta Developers).\n\nRequiere `meta_webhook_verify_token` = `META_WEBHOOK_VERIFY_TOKEN` del servidor."
+      },
+      "response": []
+    },
+    {
+      "name": "GET /webhook — Invalid token (403)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 403', () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "https://chatbot.uprit.edu.pe/webhook?hub.mode=subscribe&hub.verify_token=token_invalido&hub.challenge={{webhook_challenge}}",
+          "protocol": "https",
+          "host": ["chatbot", "uprit", "edu", "pe"],
+          "path": ["webhook"],
+          "query": [
+            { "key": "hub.mode", "value": "subscribe" },
+            { "key": "hub.verify_token", "value": "token_invalido" },
+            { "key": "hub.challenge", "value": "{{webhook_challenge}}" }
+          ]
+        },
+        "description": "Verifica que tokens incorrectos sean rechazados."
+      },
+      "response": []
+    },
+    {
+      "name": "POST /webhook — Text message",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const secret = pm.environment.get('webhook_secret');",
+              "",
+              "if (!secret || secret.startsWith('TU_')) {",
+              "    console.warn('Configura webhook_secret en el environment (WEBHOOK_SECRET del .env).');",
+              "}",
+              "",
+              "const rawBody = pm.variables.replaceIn(pm.request.body.raw);",
+              "const signature = CryptoJS.HmacSHA256(rawBody, secret).toString(CryptoJS.enc.Hex);",
+              "",
+              "pm.request.headers.upsert({",
+              "    key: 'x-hub-signature-256',",
+              "    value: 'sha256=' + signature",
+              "});",
+              "",
+              "pm.request.body.update(rawBody);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "",
+              "pm.test('Responde rápido (Meta exige 200)', () => {",
+              "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"WHATSAPP_BUSINESS_ACCOUNT_ID\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": {\n              \"display_phone_number\": \"15551234567\",\n              \"phone_number_id\": \"1234567890\"\n            },\n            \"contacts\": [\n              {\n                \"profile\": { \"name\": \"Postman Test\" },\n                \"wa_id\": \"{{test_wa_id}}\"\n              }\n            ],\n            \"messages\": [\n              {\n                \"from\": \"{{test_wa_id}}\",\n                \"id\": \"wamid.postman.test.001\",\n                \"timestamp\": \"1719900000\",\n                \"type\": \"text\",\n                \"text\": { \"body\": \"{{test_message}}\" }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "https://chatbot.uprit.edu.pe/webhook",
+          "protocol": "https",
+          "host": ["chatbot", "uprit", "edu", "pe"],
+          "path": ["webhook"]
+        },
+        "description": "Simula un mensaje de texto entrante de WhatsApp en producción.\n\nEl pre-request script firma el body con `WEBHOOK_SECRET`.\n\n**Nota:** dispara el flujo real (IA + respuesta WhatsApp)."
+      },
+      "response": []
+    },
+    {
+      "name": "POST /webhook — Invalid signature (403)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 403', () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "x-hub-signature-256", "value": "sha256=firma_invalida_de_prueba" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": []\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "https://chatbot.uprit.edu.pe/webhook",
+          "protocol": "https",
+          "host": ["chatbot", "uprit", "edu", "pe"],
+          "path": ["webhook"]
+        },
+        "description": "Verifica que payloads sin firma HMAC válida sean rechazados."
+      },
+      "response": []
+    },
+    {
+      "name": "POST /conversations/:id/interactive-buttons — B1",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 201', () => pm.response.to.have.status(201));",
+              "pm.test('Has messageId', () => {",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.messageId).to.be.a('string').and.not.empty;",
+              "    pm.expect(json.status).to.eql('sent');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{agent_token}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"body\": \"¿Cómo podemos ayudarte hoy?\",\n  \"buttons\": [\n    { \"id\": \"opt_info\",    \"title\": \"Información\" },\n    { \"id\": \"opt_soporte\", \"title\": \"Soporte\" },\n    { \"id\": \"opt_otro\",    \"title\": \"Otro tema\" }\n  ]\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/{{conversation_id}}/interactive-buttons",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "conversations", "{{conversation_id}}", "interactive-buttons"]
+        },
+        "description": "B1 — Envía hasta 3 botones de respuesta rápida (button_reply) al lead en WhatsApp. Requiere conversación en modo humano y ventana 24h abierta."
+      },
+      "response": []
+    },
+    {
+      "name": "POST /conversations/:id/interactive-list — B2",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 201', () => pm.response.to.have.status(201));",
+              "pm.test('Has messageId', () => {",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.messageId).to.be.a('string').and.not.empty;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{agent_token}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"body\": \"Elige una carrera para recibir información:\",\n  \"buttonText\": \"Ver carreras\",\n  \"sections\": [\n    {\n      \"title\": \"Pregrado\",\n      \"rows\": [\n        { \"id\": \"car_admin\",   \"title\": \"Administración\",    \"description\": \"Duración 5 años\" },\n        { \"id\": \"car_sistemas\",\"title\": \"Ing. de Sistemas\",  \"description\": \"Duración 5 años\" },\n        { \"id\": \"car_derecho\", \"title\": \"Derecho\",            \"description\": \"Duración 5 años\" }\n      ]\n    }\n  ]\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/{{conversation_id}}/interactive-list",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "conversations", "{{conversation_id}}", "interactive-list"]
+        },
+        "description": "B2 — Envía un mensaje de lista interactiva (list_reply) con secciones y filas. Requiere conversación en modo humano y ventana 24h abierta."
+      },
+      "response": []
+    },
+    {
+      "name": "POST /conversations/:id/cta-url — B3",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 201', () => pm.response.to.have.status(201));",
+              "pm.test('Has messageId', () => {",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.messageId).to.be.a('string').and.not.empty;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{agent_token}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"body\": \"Completa tu preinscripción en línea:\",\n  \"displayText\": \"Ir al portal\",\n  \"url\": \"https://admision.uprit.edu.pe/preinscripcion\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/{{conversation_id}}/cta-url",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "conversations", "{{conversation_id}}", "cta-url"]
+        },
+        "description": "B3 — Envía un botón CTA URL (type=cta_url, Meta API v20+). El lead puede abrir la URL directamente desde el mensaje."
+      },
+      "response": []
+    },
+    {
+      "name": "POST /webhook — Inbound interactive button_reply",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const secret = pm.environment.get('webhook_secret');",
+              "const rawBody = pm.variables.replaceIn(pm.request.body.raw);",
+              "const signature = CryptoJS.HmacSHA256(rawBody, secret).toString(CryptoJS.enc.Hex);",
+              "pm.request.headers.upsert({ key: 'x-hub-signature-256', value: 'sha256=' + signature });",
+              "pm.request.body.update(rawBody);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Inbound interactive processed', () => {",
+              "    pm.expect(pm.response.text()).to.be.a('string');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"WHATSAPP_BUSINESS_ACCOUNT_ID\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": {\n              \"display_phone_number\": \"15551234567\",\n              \"phone_number_id\": \"1234567890\"\n            },\n            \"contacts\": [\n              { \"profile\": { \"name\": \"Alumno Demo\" }, \"wa_id\": \"{{test_wa_id}}\" }\n            ],\n            \"messages\": [\n              {\n                \"from\": \"{{test_wa_id}}\",\n                \"id\": \"wamid.interactive.button.001\",\n                \"timestamp\": \"1719900100\",\n                \"type\": \"interactive\",\n                \"interactive\": {\n                  \"type\": \"button_reply\",\n                  \"button_reply\": {\n                    \"id\": \"opt_info\",\n                    \"title\": \"Información\"\n                  }\n                }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/webhook",
+          "host": ["{{base_url}}"],
+          "path": ["webhook"]
+        },
+        "description": "B1 inbound — Simula la respuesta de un lead a un mensaje de botones. El parser normaliza button_reply.title a texto para el HandleIncomingMessageUseCase."
+      },
+      "response": []
+    },
+    {
+      "name": "POST /webhook — Inbound location (A7)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const secret = pm.environment.get('webhook_secret');",
+              "const rawBody = pm.variables.replaceIn(pm.request.body.raw);",
+              "const signature = CryptoJS.HmacSHA256(rawBody, secret).toString(CryptoJS.enc.Hex);",
+              "pm.request.headers.upsert({ key: 'x-hub-signature-256', value: 'sha256=' + signature });",
+              "pm.request.body.update(rawBody);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"WHATSAPP_BUSINESS_ACCOUNT_ID\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": {\n              \"display_phone_number\": \"15551234567\",\n              \"phone_number_id\": \"1234567890\"\n            },\n            \"contacts\": [\n              { \"profile\": { \"name\": \"Alumno Demo\" }, \"wa_id\": \"{{test_wa_id}}\" }\n            ],\n            \"messages\": [\n              {\n                \"from\": \"{{test_wa_id}}\",\n                \"id\": \"wamid.location.001\",\n                \"timestamp\": \"1719900200\",\n                \"type\": \"location\",\n                \"location\": {\n                  \"latitude\": -8.1116,\n                  \"longitude\": -79.0285,\n                  \"name\": \"UPRIT Trujillo\",\n                  \"address\": \"Av. América Sur 2555, Trujillo\"\n                }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/webhook",
+          "host": ["{{base_url}}"],
+          "path": ["webhook"]
+        },
+        "description": "A7 inbound — Lead comparte ubicación. Parser guarda contentType=location, content=address y lat/lng en metadata."
+      },
+      "response": []
+    },
+    {
+      "name": "POST /webhook — Audio message (A4)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const secret = pm.environment.get('webhook_secret');",
+              "const rawBody = pm.variables.replaceIn(pm.request.body.raw);",
+              "const signature = CryptoJS.HmacSHA256(rawBody, secret).toString(CryptoJS.enc.Hex);",
+              "pm.request.headers.upsert({ key: 'x-hub-signature-256', value: 'sha256=' + signature });",
+              "pm.request.body.update(rawBody);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"WHATSAPP_BUSINESS_ACCOUNT_ID\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": {\n              \"display_phone_number\": \"15551234567\",\n              \"phone_number_id\": \"1234567890\"\n            },\n            \"contacts\": [\n              { \"profile\": { \"name\": \"Alumno Demo\" }, \"wa_id\": \"{{test_wa_id}}\" }\n            ],\n            \"messages\": [\n              {\n                \"from\": \"{{test_wa_id}}\",\n                \"id\": \"wamid.audio.001\",\n                \"timestamp\": \"1719900300\",\n                \"type\": \"audio\",\n                \"audio\": {\n                  \"mime_type\": \"audio/ogg; codecs=opus\",\n                  \"sha256\": \"abc789\",\n                  \"id\": \"META_MEDIA_ID_AUDIO\",\n                  \"voice\": true\n                }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/webhook",
+          "host": ["{{base_url}}"],
+          "path": ["webhook"]
+        },
+        "description": "A4 inbound — Nota de voz del lead. Parser guarda contentType=audio, descarga media de Meta y persiste en storage local."
+      },
+      "response": []
+    },
+    {
+      "name": "POST /webhook — Video message (A5)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const secret = pm.environment.get('webhook_secret');",
+              "const rawBody = pm.variables.replaceIn(pm.request.body.raw);",
+              "const signature = CryptoJS.HmacSHA256(rawBody, secret).toString(CryptoJS.enc.Hex);",
+              "pm.request.headers.upsert({ key: 'x-hub-signature-256', value: 'sha256=' + signature });",
+              "pm.request.body.update(rawBody);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"WHATSAPP_BUSINESS_ACCOUNT_ID\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": {\n              \"display_phone_number\": \"15551234567\",\n              \"phone_number_id\": \"1234567890\"\n            },\n            \"contacts\": [\n              { \"profile\": { \"name\": \"Alumno Demo\" }, \"wa_id\": \"{{test_wa_id}}\" }\n            ],\n            \"messages\": [\n              {\n                \"from\": \"{{test_wa_id}}\",\n                \"id\": \"wamid.video.001\",\n                \"timestamp\": \"1719900400\",\n                \"type\": \"video\",\n                \"video\": {\n                  \"caption\": \"Video de consulta\",\n                  \"mime_type\": \"video/mp4\",\n                  \"sha256\": \"ghi012\",\n                  \"id\": \"META_MEDIA_ID_VIDEO\"\n                }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/webhook",
+          "host": ["{{base_url}}"],
+          "path": ["webhook"]
+        },
+        "description": "A5 inbound — Video del lead. Parser guarda contentType=video + caption opcional."
+      },
+      "response": []
+    },
+    {
+      "name": "POST /conversations/:id/messages — Send audio (multipart)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 201', () => pm.response.to.have.status(201));",
+              "pm.test('contentType audio', () => {",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.contentType).to.eql('audio');",
+              "    pm.expect(json.messageId).to.be.a('string').and.not.empty;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{agent_token}}" }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "content", "value": "Te envío un audio explicativo", "type": "text" },
+            { "key": "file", "type": "file", "src": "", "description": "Selecciona .ogg o .mp3 (audio/ogg, audio/mpeg)" }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/{{conversation_id}}/messages",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "conversations", "{{conversation_id}}", "messages"]
+        },
+        "description": "A4 outbound — Agente envía nota de voz al lead. multipart/form-data: content (caption opcional) + file. Requiere modo human + ventana 24h."
+      },
+      "response": []
+    },
+    {
+      "name": "POST /conversations/:id/messages — Send video (multipart)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 201', () => pm.response.to.have.status(201));",
+              "pm.test('contentType video', () => {",
+              "    const json = pm.response.json();",
+              "    pm.expect(json.contentType).to.eql('video');",
+              "    pm.expect(json.messageId).to.be.a('string').and.not.empty;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{agent_token}}" }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "content", "value": "Video informativo", "type": "text" },
+            { "key": "file", "type": "file", "src": "", "description": "Selecciona .mp4 (video/mp4)" }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/{{conversation_id}}/messages",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "conversations", "{{conversation_id}}", "messages"]
+        },
+        "description": "A5 outbound — Agente envía video MP4 al lead. multipart/form-data. Máx 16 MB."
+      },
+      "response": []
+    },
+    {
+      "name": "POST /webhook — Status update (ignored, 200)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const secret = pm.environment.get('webhook_secret');",
+              "const rawBody = pm.variables.replaceIn(pm.request.body.raw);",
+              "const signature = CryptoJS.HmacSHA256(rawBody, secret).toString(CryptoJS.enc.Hex);",
+              "pm.request.headers.upsert({ key: 'x-hub-signature-256', value: 'sha256=' + signature });",
+              "pm.request.body.update(rawBody);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"WHATSAPP_BUSINESS_ACCOUNT_ID\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": {\n              \"display_phone_number\": \"15551234567\",\n              \"phone_number_id\": \"1234567890\"\n            },\n            \"statuses\": [\n              {\n                \"id\": \"wamid.postman.status.001\",\n                \"status\": \"delivered\",\n                \"timestamp\": \"1719900001\",\n                \"recipient_id\": \"{{test_wa_id}}\"\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "https://chatbot.uprit.edu.pe/webhook",
+          "protocol": "https",
+          "host": ["chatbot", "uprit", "edu", "pe"],
+          "path": ["webhook"]
+        },
+        "description": "Actualizaciones de estado (delivered/read). El servidor responde 200 pero no procesa el evento."
+      },
+      "response": []
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+[
+  {
+    "id": "nm-qr-005",
+    "title": "Despedida",
+    "body": "¡Gracias por contactar a Novedades Maritex! ¿Puedo ayudarte en algo más? 🌟",
+    "createdBy": "nm-chatbot-admin-001",
+    "createdAt": "2026-09-03T04:39:23.688Z",
+    "updatedAt": "2026-09-03T04:39:23.688Z"
+  },
+  {
+    "id": "nm-qr-004",
+    "title": "Pedido en proceso",
+    "body": "Tu pedido está siendo atendido. Te confirmo en breve ✅",
+    "createdBy": "nm-chatbot-admin-001",
+    "createdAt": "2026-09-03T04:39:23.683Z",
+    "updatedAt": "2026-09-03T04:39:23.683Z"
+  },
+  {
+    "id": "nm-qr-002",
+    "title": "Revisando consulta",
+    "body": "Estoy revisando tu consulta, dame un momento por favor 😊",
+    "createdBy": "nm-chatbot-admin-001",
+    "createdAt": "2026-09-03T04:39:23.670Z",
+    "updatedAt": "2026-09-03T04:39:23.670Z"
+  },
+  {
+    "id": "nm-qr-001",
+    "title": "Saludo",
+    "body": "¡Hola! Soy [nombre] de Novedades Maritex 👗. ¿En qué puedo ayudarte hoy?",
+    "createdBy": "nm-chatbot-admin-001",
+    "createdAt": "2026-09-03T04:39:23.650Z",
+    "updatedAt": "2026-09-03T04:39:23.650Z"
+  },
+  {
+    "id": "nm-qr-003",
+    "title": "Sitio web",
+    "body": "Para más información visita: https://novedadesmaritex.net.pe",
+    "createdBy": "nm-chatbot-admin-001",
+    "createdAt": "2026-09-03T04:39:23.677Z",
+    "updatedAt": "2026-09-03T04:39:23.677Z"
+  }
+]

@@ -1,0 +1,166 @@
+# Chatbot UPRIT only — Maritex uses nm-deploy observability (grafana.novedadesmaritex.net.pe).
+name: chatbot-uprit
+
+networks:
+  chatbot-net:
+    driver: bridge
+
+volumes:
+  logs-data:
+  uploads-data:
+  loki-data:
+  grafana-data:
+
+services:
+
+  # ───────────────────────────────────────────────────────────────────────────
+  #  API — Backend chatbot UPRIT
+  # ───────────────────────────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+
+    container_name: chatbot-uprit-app
+    image: chatbot-uprit:latest
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    environment:
+      NODE_ENV: production
+      SERVICE_NAME: chatbot-uprit
+
+    ports:
+      # Grafana ocupa el puerto 3000 del host — la API se expone en API_PORT
+      # Nginx en el host proxy admision.uprit.edu.pe/api → API_PORT (default 8090)
+      - "${API_PORT:-8080}:3000"
+
+    networks:
+      - chatbot-net
+
+    volumes:
+      - logs-data:/app/logs
+      - uploads-data:/app/uploads
+
+    labels:
+      logging: promtail
+      app: chatbot-uprit
+
+    init: true
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+
+    # json-file: Promtail lee los logs vía Docker socket + service discovery
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+        tag: "{{.Name}}"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  #  LOKI — Almacén e indexador de logs (opcional: --profile observability)
+  # ───────────────────────────────────────────────────────────────────────────
+  loki:
+    profiles: [observability]
+    image: grafana/loki:3.4.2
+    container_name: chatbot-uprit-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./deploy/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki-data:/loki
+    networks:
+      - chatbot-net
+    ports:
+      - "3100:3100"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3100/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ───────────────────────────────────────────────────────────────────────────
+  #  PROMTAIL — Recolector de logs (Docker → Loki)
+  # ───────────────────────────────────────────────────────────────────────────
+  promtail:
+    profiles: [observability]
+    image: grafana/promtail:3.4.2
+    container_name: chatbot-uprit-promtail
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail-config.yaml
+    volumes:
+      - ./deploy/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    networks:
+      - chatbot-net
+    depends_on:
+      loki:
+        condition: service_healthy
+
+  # ───────────────────────────────────────────────────────────────────────────
+  #  GRAFANA — Visualización y consulta de logs
+  # ───────────────────────────────────────────────────────────────────────────
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:11.5.2
+    container_name: chatbot-uprit-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
+      GF_LOG_MODE: console
+      GF_LOG_LEVEL: warn
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - chatbot-net
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      loki:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ───────────────────────────────────────────────────────────────────────────
+  #  MongoDB LOCAL (opcional — descomentar para desarrollo sin Atlas)
+  # ───────────────────────────────────────────────────────────────────────────
+  # mongo:
+  #   image: mongo:7-jammy
+  #   container_name: chatbot-uprit-mongo
+  #   restart: unless-stopped
+  #   ports:
+  #     - "27017:27017"
+  #   environment:
+  #     MONGO_INITDB_DATABASE: chatbot_uprit
+  #   volumes:
+  #     - mongo-data:/data/db
+  #   networks:
+  #     - chatbot-net

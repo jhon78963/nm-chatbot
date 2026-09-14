@@ -1,0 +1,136 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "type": "text",
+      "title": "",
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "options": {
+        "mode": "markdown",
+        "content": "# Historial de asesores — Chatbot UPRIT\nAcciones de los asesores en el panel: login, mensajes, devolver al bot, etc. Actualización automática cada 30 s."
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Acciones (24 h)",
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 3 },
+      "id": 1,
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({container=\"chatbot-uprit-app\", logType=\"agent_audit\"}[24h]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "blue" }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "value" }
+    },
+    {
+      "type": "stat",
+      "title": "Mensajes enviados (24 h)",
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 3 },
+      "id": 2,
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({container=\"chatbot-uprit-app\", logType=\"agent_audit\", action=\"message_sent\"}[24h]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "green" }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "value" }
+    },
+    {
+      "type": "stat",
+      "title": "Logins exitosos (24 h)",
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 3 },
+      "id": 3,
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({container=\"chatbot-uprit-app\", logType=\"agent_audit\", action=\"login_success\"}[24h]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "purple" }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "value" }
+    },
+    {
+      "type": "logs",
+      "title": "Historial de acciones",
+      "gridPos": { "h": 22, "w": 24, "x": 0, "y": 7 },
+      "id": 4,
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{container=\"chatbot-uprit-app\", logType=\"agent_audit\"} | json | line_format \"{{if .contactName}}{{.contactName}} ({{.phoneNumber}}){{else}}{{.phoneNumber}}{{end}} — {{.agentName}} ({{.agentUsername}}) — {{.action}} — {{if .contentPreview}}{{.contentPreview}}{{else}}{{.detail}}{{end}}\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      }
+    },
+    {
+      "type": "logs",
+      "title": "Solo mensajes enviados",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 29 },
+      "id": 5,
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{container=\"chatbot-uprit-app\", logType=\"agent_audit\", action=\"message_sent\"} | json",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["chatbot", "uprit", "audit", "asesores"],
+  "templating": { "list": [] },
+  "time": { "from": "now-7d", "to": "now" },
+  "timepicker": {},
+  "timezone": "America/Lima",
+  "title": "Historial de asesores",
+  "uid": "uprit-agent-audit",
+  "version": 1
+}

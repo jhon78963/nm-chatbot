@@ -1,0 +1,49 @@
+# ── Dependencias (se reinstalan dentro del contenedor) ────────────────────────
+node_modules
+
+# ── Código compilado (se regenera en el stage builder) ────────────────────────
+dist
+.tsbuildinfo
+
+# ── Variables de entorno — NUNCA incluir en la imagen ─────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+logs
+*.log
+npm-debug.log*
+
+# ── Control de versiones ──────────────────────────────────────────────────────
+.git
+.gitignore
+.gitattributes
+
+# ── Docker (no hace falta incluirlo dentro de la imagen) ──────────────────────
+Dockerfile*
+.dockerignore
+docker-compose*.yml
+
+# ── Cobertura y tests ─────────────────────────────────────────────────────────
+coverage
+.nyc_output
+**/*.spec.ts
+**/*.test.ts
+
+# ── Herramientas de desarrollo / IDE ──────────────────────────────────────────
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Admin panel (se compila en Docker) ───────────────────────────────────────
+services/chatbot/admin/node_modules
+admin/node_modules
+admin/dist
+
+# ── Prisma (generado en build) ───────────────────────────────────────────────
+node_modules/.prisma
+node_modules/@prisma

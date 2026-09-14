@@ -1,0 +1,46 @@
+# Dependencias
+node_modules/
+
+# Prisma client generado (no versionar el cliente compilado)
+prisma/client/
+
+# Compilación
+dist/
+.tsbuildinfo
+admin/dist/
+admin/node_modules/
+
+# Variables de entorno — nunca versionar el .env real
+.env
+.env.local
+.env.*.local
+.env.prod
+.env.local.bak
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Cobertura de tests
+coverage/
+.nyc_output/
+
+# VPS — carpeta local (SSH, scripts, binarios); no versionar
+vps/
+
+# Postman environment con secrets reales (generado desde VPS)
+postman/*.local.json
+
+# Documentación interna
+documento_tecnico.md

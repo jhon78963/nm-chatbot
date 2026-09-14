@@ -1,0 +1,136 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "type": "text",
+      "title": "",
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "options": {
+        "mode": "markdown",
+        "content": "# Chats con nombre asignados — Chatbot UPRIT\nLeads identificados por nombre que fueron asignados a un asesor, y mensajes del asesor en esas conversaciones. Solo aparecen entradas donde el contacto tiene nombre (WhatsApp o registro). Hora: **America/Lima**."
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Asignaciones con nombre (7 d)",
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 3 },
+      "id": 1,
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({container=\"chatbot-uprit-app\", logType=\"agent_audit\", action=\"conversation_assigned\"} | json | contactName != \"\" [7d]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "orange" }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "value" }
+    },
+    {
+      "type": "stat",
+      "title": "Mensajes a leads con nombre (7 d)",
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 3 },
+      "id": 2,
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({container=\"chatbot-uprit-app\", logType=\"agent_audit\", action=\"message_sent\"} | json | contactName != \"\" [7d]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "green" }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "value" }
+    },
+    {
+      "type": "stat",
+      "title": "Cierres / devoluciones (7 d)",
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 3 },
+      "id": 3,
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({container=\"chatbot-uprit-app\", logType=\"agent_audit\", action=~\"conversation_closed|return_to_bot\"} | json | contactName != \"\" [7d]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "blue" }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "value" }
+    },
+    {
+      "type": "logs",
+      "title": "Asignaciones a asesor (con nombre)",
+      "gridPos": { "h": 14, "w": 24, "x": 0, "y": 7 },
+      "id": 4,
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{container=\"chatbot-uprit-app\", logType=\"agent_audit\", action=\"conversation_assigned\"} | json | contactName != \"\" | line_format \"{{.contactName}} — {{.phoneNumber}} → {{.agentName}} (handoff: {{.handoffBy}})\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      }
+    },
+    {
+      "type": "logs",
+      "title": "Actividad del asesor en chats con nombre",
+      "gridPos": { "h": 18, "w": 24, "x": 0, "y": 21 },
+      "id": 5,
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{container=\"chatbot-uprit-app\", logType=\"agent_audit\", action=~\"message_sent|return_to_bot|conversation_closed\"} | json | contactName != \"\" | line_format \"{{.contactName}} ({{.phoneNumber}}) — {{.agentName}} — {{.action}} — {{if .contentPreview}}{{.contentPreview}}{{else}}{{.detail}}{{end}}\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["chatbot", "uprit", "asesores", "leads"],
+  "templating": { "list": [] },
+  "time": { "from": "now-7d", "to": "now" },
+  "timepicker": {},
+  "timezone": "America/Lima",
+  "title": "Chats con nombre asignados",
+  "uid": "uprit-named-assigned-chats",
+  "version": 1
+}

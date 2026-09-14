@@ -1,0 +1,149 @@
+{
+  "info": {
+    "name": "Chatbot UPRIT — WhatsApp Webhook",
+    "description": "Pruebas del webhook Meta WhatsApp y envío outbound vía Graph API.\n\nImporta también el environment `chatbot-uprit.postman_environment.json` y completa `webhook_secret` y `meta_token`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Health check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/health"
+      },
+      "response": []
+    },
+    {
+      "name": "2. Webhook — Verificación Meta (GET)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/webhook?hub.mode=subscribe&hub.verify_token={{webhook_verify_token}}&hub.challenge=postman-challenge-123",
+          "host": ["{{base_url}}"],
+          "path": ["webhook"],
+          "query": [
+            { "key": "hub.mode", "value": "subscribe" },
+            { "key": "hub.verify_token", "value": "{{webhook_verify_token}}" },
+            { "key": "hub.challenge", "value": "postman-challenge-123" }
+          ]
+        },
+        "description": "Simula la verificación que hace Meta al suscribir el webhook.\n\nRespuesta esperada: `postman-challenge-123` (texto plano, status 200)."
+      },
+      "response": []
+    },
+    {
+      "name": "3. Webhook — Mensaje entrante simulado (POST)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const secret = pm.environment.get('webhook_secret') || pm.environment.get('WEBHOOK_SECRET');",
+              "if (!secret) {",
+              "  throw new Error('Falta webhook_secret. Ejecuta: ./deploy/postman/sync-postman-env.sh y re-importa el environment en Postman.');",
+              "}",
+              "",
+              "const waId = pm.environment.get('test_wa_id') || '51999888777';",
+              "const text = pm.environment.get('test_message') || 'Hola, quiero información';",
+              "const msgId = 'wamid.postman.' + Date.now();",
+              "const ts = Math.floor(Date.now() / 1000).toString();",
+              "",
+              "const body = JSON.stringify({",
+              "  object: 'whatsapp_business_account',",
+              "  entry: [{",
+              "    id: '1486400022400932',",
+              "    changes: [{",
+              "      field: 'messages',",
+              "      value: {",
+              "        messaging_product: 'whatsapp',",
+              "        metadata: {",
+              "          display_phone_number: '15550000000',",
+              "          phone_number_id: pm.environment.get('phone_number_id')",
+              "        },",
+              "        contacts: [{ profile: { name: 'Usuario Postman' }, wa_id: waId }],",
+              "        messages: [{",
+              "          from: waId,",
+              "          id: msgId,",
+              "          timestamp: ts,",
+              "          type: 'text',",
+              "          text: { body: text }",
+              "        }]",
+              "      }",
+              "    }]",
+              "  }]",
+              "});",
+              "",
+              "pm.variables.set('webhook_body', body);",
+              "",
+              "const signature = CryptoJS.HmacSHA256(body, secret).toString(CryptoJS.enc.Hex);",
+              "pm.request.headers.upsert({ key: 'x-hub-signature-256', value: 'sha256=' + signature });"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Meta espera 200 inmediato', function () {",
+              "  pm.response.to.have.status(200);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{{webhook_body}}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{base_url}}/webhook",
+        "description": "Simula un mensaje de texto entrante de Meta.\n\nEl pre-request script:\n1. Arma el payload JSON oficial de Meta\n2. Calcula `x-hub-signature-256` con HMAC-SHA256 (WEBHOOK_SECRET)\n\nRespuesta inmediata: HTTP 200 (sin body). El bot procesa en background y responde por WhatsApp al número `test_wa_id`.\n\nRevisa logs en el servidor:\n`sudo docker compose -f /opt/chatbot-uprit/docker-compose.yml logs -f app`"
+      },
+      "response": []
+    },
+    {
+      "name": "4. Meta Graph API — Enviar mensaje (outbound)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{meta_token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{test_wa_id}}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"preview_url\": false,\n    \"body\": \"Mensaje de prueba directo desde Postman (Graph API)\"\n  }\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "https://graph.facebook.com/{{meta_api_version}}/{{phone_number_id}}/messages",
+        "description": "Envía un mensaje directamente vía Meta Graph API (sin pasar por tu webhook).\n\nÚtil para verificar token y phone_number_id.\n\nEl número destino (`test_wa_id`) debe estar registrado como número de prueba en Meta Developers si la app no está en producción."
+      },
+      "response": []
+    },
+    {
+      "name": "5. Webhook — POST sin firma (debe fallar 403)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": []\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{base_url}}/webhook",
+        "description": "Prueba de seguridad: sin header x-hub-signature-256 debe retornar 403 Forbidden."
+      },
+      "response": []
+    }
+  ]
+}
