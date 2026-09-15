@@ -43,8 +43,10 @@ async function bootstrap(): Promise<void> {
   const jwtSecret = process.env['JWT_SECRET'];
   if (!jwtSecret) throw new Error('JWT_SECRET environment variable is required');
 
-  if (process.env['ERP_SSO_ONLY'] === 'true' && !process.env['ERP_JWT_SECRET']) {
-    throw new Error('ERP_JWT_SECRET environment variable is required when ERP_SSO_ONLY=true');
+  // ERP_JWT_SECRET siempre requerido — no debe usarse JWT_SECRET como fallback
+  // para verificar tokens del ERP (evita que tokens del chatbot sean aceptados como ERP).
+  if (!process.env['ERP_JWT_SECRET']) {
+    throw new Error('ERP_JWT_SECRET environment variable is required');
   }
 
   // ── Repositories (PostgreSQL / Prisma) ────────────────────────────────────

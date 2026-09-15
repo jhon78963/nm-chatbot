@@ -33,7 +33,9 @@ export class SsoErpLoginUseCase {
   constructor(private readonly agentRepo: AgentRepository) {}
 
   async execute(input: SsoErpLoginInput): Promise<SsoErpLoginOutput> {
-    const erpSecret = process.env['ERP_JWT_SECRET'] ?? process.env['JWT_SECRET'];
+    // ERP_JWT_SECRET es obligatorio y nunca debe caer en JWT_SECRET como fallback,
+    // ya que eso permitiría que tokens del panel chatbot sean aceptados como tokens ERP.
+    const erpSecret = process.env['ERP_JWT_SECRET'];
     if (!erpSecret) {
       throw new Error('ERP_JWT_SECRET not configured');
     }

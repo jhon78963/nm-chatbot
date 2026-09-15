@@ -13,6 +13,7 @@ import type { AgentRepository } from '../../../domain/repositories/agent.reposit
 import { Prisma } from '@prisma/client';
 import { loginWithAuthService } from '../erp-auth.client.js';
 import { clientIp, logAgentAudit } from '../../shared/agent-audit.logger.js';
+import { authRateLimiter } from '../middlewares/ip-rate-limit.middleware.js';
 
 export function createAuthRouter(agentRepo: AgentRepository): Router {
   const router = Router();
@@ -26,7 +27,7 @@ export function createAuthRouter(agentRepo: AgentRepository): Router {
     });
   });
 
-  router.post('/api/v1/auth/sso-erp', async (req: Request, res: Response) => {
+  router.post('/api/v1/auth/sso-erp', authRateLimiter, async (req: Request, res: Response) => {
     const authHeader = req.headers['authorization'];
     const bodyToken = (req.body as { token?: string } | undefined)?.token;
     const erpAccessToken = authHeader?.startsWith('Bearer ')
@@ -62,7 +63,7 @@ export function createAuthRouter(agentRepo: AgentRepository): Router {
     }
   });
 
-  router.post('/api/v1/auth/login', async (req: Request, res: Response) => {
+  router.post('/api/v1/auth/login', authRateLimiter, async (req: Request, res: Response) => {
     if (isErpSsoOnlyEnabled()) {
       res.status(403).json({
         error: 'El acceso al chatbot es solo desde el ERP. Abre el panel en Aplicaciones → Chatbot.',
