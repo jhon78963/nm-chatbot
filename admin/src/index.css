@@ -2,15 +2,15 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --clr-primary: #0066cc;
-  --clr-primary-dark: #0052a3;
+  --clr-primary: #f97316;
+  --clr-primary-dark: #ea580c;
   --clr-danger: #dc2626;
   --clr-bg: #f3f4f6;
   --clr-surface: #ffffff;
   --clr-border: #e5e7eb;
   --clr-text: #111827;
   --clr-muted: #6b7280;
-  --clr-unread: #0066cc;
+  --clr-unread: #f97316;
   --radius: 10px;
   --shadow: 0 1px 3px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.08);
   --shadow-md: 0 4px 12px rgba(0,0,0,.15);
@@ -78,7 +78,7 @@ body { min-height: 100dvh; }
 }
 .form-group input:focus {
   border-color: var(--clr-primary);
-  box-shadow: 0 0 0 3px rgba(0,102,204,.18);
+  box-shadow: 0 0 0 3px rgba(249,115,22,.18);
 }
 
 /* ── Login — theme tokens ────────────────────────────────── */
@@ -89,8 +89,8 @@ body { min-height: 100dvh; }
   --login-border: rgba(0, 0, 0, .12);
   --login-text: #111827;
   --login-muted: #6b7280;
-  --login-accent: #99001a;
-  --login-accent-hover: #7a0015;
+  --login-accent: #f97316;
+  --login-accent-hover: #ea580c;
   --login-eye: #6b7280;
   --login-eye-hover: #111827;
   --login-hero-bg: #e5e7eb;
@@ -192,8 +192,8 @@ body { min-height: 100dvh; }
   color: var(--login-muted);
 }
 .login-page .form-group input:focus {
-  border-color: rgba(153, 0, 26, .55);
-  box-shadow: 0 0 0 3px rgba(153, 0, 26, .18);
+  border-color: rgba(249, 115, 22, .55);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, .18);
 }
 .login-page .form-group input:disabled {
   opacity: .55;
@@ -315,12 +315,12 @@ body { min-height: 100dvh; }
   --dash-border: rgba(0,0,0,.1);
   --dash-text: #111827;
   --dash-muted: #667781;
-  --dash-accent: #99001a;
-  --dash-accent-hover: #7a0015;
+  --dash-accent: #f97316;
+  --dash-accent-hover: #ea580c;
   --dash-hover: rgba(0,0,0,.05);
-  --dash-active: rgba(153,0,26,.08);
+  --dash-active: rgba(249,115,22,.08);
   --dash-bubble-in: #ffffff;
-  --dash-bubble-out: #99001a;
+  --dash-bubble-out: #f97316;
   /* surface overlays */
   --dash-surface: rgba(0,0,0,.05);
   --dash-surface-sm: rgba(0,0,0,.05);
@@ -355,7 +355,7 @@ body { min-height: 100dvh; }
   --dash-text: #f4f4f5;
   --dash-muted: #71717a;
   --dash-hover: rgba(255,255,255,.05);
-  --dash-active: rgba(153,0,26,.18);
+  --dash-active: rgba(249,115,22,.18);
   --dash-bubble-in: #2a2a2a;
   --dash-surface: rgba(255,255,255,.06);
   --dash-surface-sm: rgba(255,255,255,.07);
@@ -486,7 +486,7 @@ body { min-height: 100dvh; }
 .dash-inbox-search-input::placeholder { color: var(--dash-muted); }
 .dash-inbox-search-input:focus {
   background: var(--dash-surface-md);
-  border-color: rgba(153,0,26,.45);
+  border-color: rgba(249,115,22,.45);
 }
 .dash-inbox-search-clear {
   position: absolute;
@@ -530,8 +530,8 @@ body { min-height: 100dvh; }
   color: var(--dash-text);
 }
 .dash-chip--active {
-  background: var(--dash-accent, #99001a);
-  border-color: var(--dash-accent, #99001a);
+  background: var(--dash-accent, #f97316);
+  border-color: var(--dash-accent, #f97316);
   color: #fff;
   font-weight: 600;
 }
@@ -955,7 +955,7 @@ body { min-height: 100dvh; }
   transition: border-color .15s;
 }
 .dash-search-input::placeholder { color: var(--dash-muted); }
-.dash-search-input:focus { border-color: rgba(153,0,26,.5); }
+.dash-search-input:focus { border-color: rgba(249,115,22,.5); }
 .dash-search-clear {
   position: absolute;
   right: .4rem;
