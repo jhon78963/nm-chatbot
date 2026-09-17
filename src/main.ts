@@ -113,6 +113,9 @@ async function bootstrap(): Promise<void> {
           ...(process.env['META_WHATSAPP_DISPLAY_PHONE']?.trim()
             ? { displayPhone: process.env['META_WHATSAPP_DISPLAY_PHONE'].trim() }
             : {}),
+          ...(process.env['STORE_URL']?.trim()
+            ? { storeUrl: process.env['STORE_URL'].trim() }
+            : {}),
         }
       : null;
   const whatsAppRegistry = new TenantWhatsAppRegistry(envAccount);

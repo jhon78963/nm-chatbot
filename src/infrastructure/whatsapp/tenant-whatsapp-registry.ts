@@ -22,6 +22,9 @@ export interface WhatsAppAccount {
   verifyToken?: string;
   appSecret?: string;
   displayPhone?: string;
+  welcomeMessage?: string;
+  storeUrl?: string;
+  knowledge?: string;
 }
 
 interface TenantAccountPayload {
@@ -34,6 +37,9 @@ interface TenantAccountPayload {
   verifyToken?: string;
   appSecret?: string;
   displayPhone?: string;
+  welcomeMessage?: string;
+  storeUrl?: string;
+  knowledge?: string;
 }
 
 const accountAls = new AsyncLocalStorage<WhatsAppAccount>();
@@ -199,6 +205,9 @@ export class TenantWhatsAppRegistry {
           ...(row.verifyToken ? { verifyToken: row.verifyToken } : {}),
           ...(row.appSecret ? { appSecret: row.appSecret } : {}),
           ...(row.displayPhone ? { displayPhone: row.displayPhone } : {}),
+          ...(row.welcomeMessage ? { welcomeMessage: row.welcomeMessage } : {}),
+          ...(row.storeUrl ? { storeUrl: row.storeUrl } : {}),
+          ...(row.knowledge ? { knowledge: row.knowledge } : {}),
         }));
     } catch (error) {
       logger.warn('[WhatsAppRegistry] Error al leer cuentas por tenant', {
