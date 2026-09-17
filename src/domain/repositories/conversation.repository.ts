@@ -9,7 +9,11 @@ export interface InboxPagination {
 
 export interface ConversationRepository {
   findById(id: string): Promise<Conversation | null>;
-  findActiveByPhoneNumber(phoneNumber: string): Promise<Conversation | null>;
+  findActiveByPhoneNumber(
+    phoneNumber: string,
+    tenantId?: string,
+    isPlatformTenant?: boolean,
+  ): Promise<Conversation | null>;
   findByUserId(userId: string): Promise<Conversation[]>;
   /** Returns paginated human-mode conversations assigned to the given agent (no messages loaded). */
   findHumanByAgentId(agentId: string, opts: InboxPagination): Promise<Conversation[]>;

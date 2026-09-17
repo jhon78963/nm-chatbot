@@ -1,12 +1,17 @@
 import type { Program } from '../../domain/entities/program.entity.js';
 import { withCurrentDateContext } from '../../infrastructure/shared/current-date-context.js';
+import {
+  currentWhatsAppAccount,
+  type WhatsAppAccount,
+} from '../../infrastructure/whatsapp/tenant-whatsapp-registry.js';
 
 function botName(): string {
-  return process.env['BOT_NAME'] ?? 'Malu';
+  return currentWhatsAppAccount()?.botName?.trim() || process.env['BOT_NAME'] || 'Malu';
 }
 
 function storeUrl(): string {
-  return (process.env['STORE_URL'] ?? 'https://novedadesmaritex.net.pe').replace(/\/$/, '');
+  const fromTenant = currentWhatsAppAccount()?.storeUrl?.trim();
+  return (fromTenant || process.env['STORE_URL'] || 'https://novedadesmaritex.net.pe').replace(/\/$/, '');
 }
 
 function buildBaseInstructions(): string {
@@ -27,6 +32,26 @@ REGLAS:
 PRIMER MENSAJE: Si es la primera interacción, envía el mensaje de bienvenida fijo con las 4 categorías (Niño, Joven, Señorita, Adulto mayor) según knowledge_base.md.`;
 }
 
+function buildTenantInstructions(account: WhatsAppAccount): string {
+  const name = account.botName?.trim() || 'Asistente';
+  const store = (account.storeUrl ?? '').replace(/\/$/, '');
+  const knowledge = account.knowledge?.trim();
+  const knowledgeBlock = knowledge
+    ? `CONOCIMIENTO DE ESTA TIENDA:\n${knowledge}`
+    : 'No tienes catálogo ni knowledge_base de Maritex. Si preguntan precios, stock o productos específicos y no están en el conocimiento de arriba, responde ÚNICAMENTE HANDOFF_TRIGGER.';
+
+  return `Eres ${name}, el asistente virtual de esta tienda. Responde de forma concisa, amable y en el mismo idioma que el usuario. Usa SOLO texto plano sin markdown porque el canal es WhatsApp.
+
+${store ? `Tienda online: ${store}` : 'Tienda online: (no configurada todavía)'}
+
+${knowledgeBlock}
+
+REGLAS:
+- Nunca uses información de Maritex, Malu ni knowledge_base.md.
+- Nunca inventes precios, tallas, colores ni stock.
+- Cuando el cliente necesite atención humana, responde ÚNICAMENTE con el token HANDOFF_TRIGGER sin texto adicional.`;
+}
+
 const MAX_PROMPT_CHARS = 40_000;
 
 function truncate(text: string, max: number): string {
@@ -39,6 +64,11 @@ function truncate(text: string, max: number): string {
  */
 export class SystemPromptBuilderService {
   build(programs: Program[]): string {
+    const account = currentWhatsAppAccount();
+    if (account && !account.isPlatform) {
+      return withCurrentDateContext(buildTenantInstructions(account));
+    }
+
     const base = buildBaseInstructions();
 
     if (programs.length === 0) {

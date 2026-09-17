@@ -6,9 +6,14 @@ export interface AgentJwtClaims {
   username: string;
   name: string;
   role: string;
+  tenantId?: string;
 }
 
-export function signAgentToken(agent: Agent, expiresIn?: string | number): string {
+export function signAgentToken(
+  agent: Agent,
+  expiresIn?: string | number,
+  tenantId?: string,
+): string {
   const secret = process.env['JWT_SECRET'];
   if (!secret) {
     throw new Error('JWT_SECRET not configured');
@@ -24,6 +29,7 @@ export function signAgentToken(agent: Agent, expiresIn?: string | number): strin
       username,
       name: props.name,
       role: props.role,
+      ...(tenantId ? { tenantId } : {}),
     } satisfies AgentJwtClaims,
     secret,
     { expiresIn: ttl } as jwt.SignOptions,

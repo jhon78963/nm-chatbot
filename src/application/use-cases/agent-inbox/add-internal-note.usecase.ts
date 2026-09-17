@@ -55,6 +55,7 @@ export class AddInternalNoteUseCase {
         conversationMode: updated.mode,
         assignedAgentId: updated.assignedAgentId,
         message: note,
+        ...(updated.metaData?.tenantId ? { tenantId: updated.metaData.tenantId } : {}),
       });
     }
 

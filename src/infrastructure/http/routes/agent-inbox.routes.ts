@@ -33,6 +33,30 @@ import {
 } from '../middlewares/agent-media-upload.middleware.js';
 import type { AgentRepository } from '../../../domain/repositories/agent.repository.js';
 import type { MessageRepository } from '../../../domain/repositories/message.repository.js';
+import {
+  runWithConversationAccount,
+  type TenantWhatsAppRegistry,
+} from '../../whatsapp/tenant-whatsapp-registry.js';
+
+type MetaMediaPort = Pick<MetaMediaService, 'downloadMedia' | 'uploadMedia'>;
+
+function platformTenantId(): string {
+  return (
+    process.env['CHATBOT_TENANT_ID']?.trim() ||
+    process.env['ECOMMERCE_TENANT_ID']?.trim() ||
+    'b14b2a6d-ff01-57e4-9004-7ece99dc46d9'
+  );
+}
+
+function tenantScopeFromRequest(req: Request): { tenantId?: string; isPlatformTenant?: boolean } {
+  const platformId = platformTenantId();
+  const tenantId = req.agent?.tenantId?.trim() || platformId || undefined;
+  if (!tenantId) return {};
+  return {
+    tenantId,
+    isPlatformTenant: Boolean(platformId && tenantId === platformId),
+  };
+}
 
 async function auditConversationAction(
   conversationRepo: ConversationRepository,
@@ -65,10 +89,11 @@ export function createAgentInboxRouter(
   agentRepo: AgentRepository,
   messagingProvider: MessagingProviderPort,
   funnelMessageRepo: FunnelMessageMongoRepository | NoOpFunnelMessageRepository,
-  metaMediaService: MetaMediaService,
+  metaMediaService: MetaMediaPort,
   mediaStorage: MediaStoragePort,
   realtimeNotifier?: RealtimeNotifier,
   messageRepo?: MessageRepository,
+  registry?: TenantWhatsAppRegistry,
 ): Router {
   const router = Router();
 
@@ -170,6 +195,7 @@ export function createAgentInboxRouter(
       ...(q && { q }),
       ...(label && { label }),
       ...(includeArchived && { includeArchived }),
+      ...tenantScopeFromRequest(req),
     });
     res.json(result);
   });
@@ -254,17 +280,23 @@ export function createAgentInboxRouter(
         validateAgentMediaMime(file.mimetype);
       }
 
-      const result = await sendMessage.execute({
-        conversationId,
-        agentId,
-        ...(bodyContent !== undefined && { content: bodyContent }),
-        ...(file && {
-          fileBuffer: file.buffer,
-          mimeType: file.mimetype,
-          contentType: mimeToAgentContentType(file.mimetype),
-          ...(file.originalname && { fileName: file.originalname }),
-        }),
-      });
+      const send = async () =>
+        sendMessage.execute({
+          conversationId,
+          agentId,
+          ...(bodyContent !== undefined && { content: bodyContent }),
+          ...(file && {
+            fileBuffer: file.buffer,
+            mimeType: file.mimetype,
+            contentType: mimeToAgentContentType(file.mimetype),
+            ...(file.originalname && { fileName: file.originalname }),
+          }),
+        });
+
+      const conversation = await conversationRepo.findById(conversationId);
+      const result = registry
+        ? await runWithConversationAccount(registry, conversation, send)
+        : await send();
 
       const preview = bodyContent?.trim() || file?.originalname || result.contentType;
       await auditConversationAction(conversationRepo, userRepo, funnelUserRepo, req, conversationId, 'message_sent', {
@@ -281,6 +313,10 @@ export function createAgentInboxRouter(
       }
       if (err instanceof Error && err.message === 'Conversación no encontrada') {
         res.status(404).json({ error: err.message });
+        return;
+      }
+      if (err instanceof Error && err.message.includes('WhatsApp no está configurado')) {
+        res.status(409).json({ error: err.message });
         return;
       }
       if (err instanceof Error && err.message === 'La conversación no está en modo humano') {
@@ -336,11 +372,16 @@ export function createAgentInboxRouter(
     const conversationId = String(req.params['id']);
 
     try {
-      const result = await takeConversation.execute({
-        conversationId,
-        agentId,
-        agentUsername: req.agent!.username,
-      });
+      const take = () =>
+        takeConversation.execute({
+          conversationId,
+          agentId,
+          agentUsername: req.agent!.username,
+        });
+      const conversationForWa = await conversationRepo.findById(conversationId);
+      const result = registry
+        ? await runWithConversationAccount(registry, conversationForWa, take)
+        : await take();
       const conversation = await conversationRepo.findById(conversationId);
       const auditExtra: Omit<AgentAuditFields, 'action'> = {
         conversationId,
@@ -359,6 +400,10 @@ export function createAgentInboxRouter(
       logAgentAuditFromRequest(req, 'conversation_assigned', auditExtra);
       res.json(result);
     } catch (err) {
+      if (err instanceof Error && err.message.includes('WhatsApp no está configurado')) {
+        res.status(409).json({ error: err.message });
+        return;
+      }
       if (err instanceof Error && err.message === 'Conversación no encontrada') {
         res.status(404).json({ error: err.message });
         return;
@@ -550,7 +595,12 @@ export function createAgentInboxRouter(
     if (!buttons.length) { res.status(400).json({ error: 'buttons[] es requerido (máx 3)' }); return; }
 
     try {
-      const result = await sendInteractive.execute({ type: 'buttons', conversationId, agentId, body, buttons });
+      const send = () =>
+        sendInteractive.execute({ type: 'buttons', conversationId, agentId, body, buttons });
+      const conversation = await conversationRepo.findById(conversationId);
+      const result = registry
+        ? await runWithConversationAccount(registry, conversation, send)
+        : await send();
       res.status(201).json(result);
     } catch (err) {
       if (err instanceof ForbiddenError) { res.status(403).json({ error: err.message }); return; }
@@ -574,7 +624,12 @@ export function createAgentInboxRouter(
     if (!sections.length) { res.status(400).json({ error: 'sections[] es requerido' }); return; }
 
     try {
-      const result = await sendInteractive.execute({ type: 'list', conversationId, agentId, body, buttonText, sections });
+      const send = () =>
+        sendInteractive.execute({ type: 'list', conversationId, agentId, body, buttonText, sections });
+      const conversation = await conversationRepo.findById(conversationId);
+      const result = registry
+        ? await runWithConversationAccount(registry, conversation, send)
+        : await send();
       res.status(201).json(result);
     } catch (err) {
       if (err instanceof ForbiddenError) { res.status(403).json({ error: err.message }); return; }
@@ -598,7 +653,12 @@ export function createAgentInboxRouter(
     if (!url.trim()) { res.status(400).json({ error: 'url es requerido' }); return; }
 
     try {
-      const result = await sendInteractive.execute({ type: 'cta_url', conversationId, agentId, body, displayText, url });
+      const send = () =>
+        sendInteractive.execute({ type: 'cta_url', conversationId, agentId, body, displayText, url });
+      const conversation = await conversationRepo.findById(conversationId);
+      const result = registry
+        ? await runWithConversationAccount(registry, conversation, send)
+        : await send();
       res.status(201).json(result);
     } catch (err) {
       if (err instanceof ForbiddenError) { res.status(403).json({ error: err.message }); return; }

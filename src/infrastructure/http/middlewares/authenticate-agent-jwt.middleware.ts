@@ -7,15 +7,22 @@ export interface AgentJwtPayload {
   username: string;
   name: string;
   role?: AgentRole;
+  tenantId?: string;
 }
 
+/**
+ * Extrae el token SOLO desde el header Authorization: Bearer <token>.
+ * El query param ?token= NO se acepta en rutas HTTP para evitar que el JWT
+ * quede expuesto en logs de servidor, Cloudflare y historial del browser.
+ * El WebSocket sí usa ?token= en el handshake inicial (websocket-realtime.adapter.ts),
+ * lo cual es el comportamiento estándar ya que los browsers no envían headers en WS.
+ */
 function extractBearerOrQueryToken(req: Request): string | null {
   const authHeader = req.headers['authorization'];
   if (authHeader?.startsWith('Bearer ')) {
     return authHeader.slice(7);
   }
-  const queryToken = req.query['token'];
-  return typeof queryToken === 'string' && queryToken.length > 0 ? queryToken : null;
+  return null;
 }
 
 export function authenticateAgentJwt(req: Request, res: Response, next: NextFunction): void {
@@ -37,6 +44,7 @@ export function authenticateAgentJwt(req: Request, res: Response, next: NextFunc
       username: payload.username,
       name: payload.name,
       role: payload.role ?? 'agent',
+      tenantId: payload.tenantId,
     };
     next();
   } catch {

@@ -59,6 +59,7 @@ interface ClientState {
   username: string;
   name: string;
   role: string;
+  tenantId?: string;
   lastActivityAt: number;
 }
 
@@ -188,12 +189,12 @@ export class WebSocketRealtimeAdapter implements RealtimePort {
   }
 
   /** Send event only to sockets whose JWT role is 'admin'. */
-  broadcastToAdmins(event: RealtimeEvent): void {
+  broadcastToAdmins(event: RealtimeEvent, tenantId?: string): void {
     const payload = JSON.stringify(event);
     for (const sockets of this.connections.values()) {
       for (const ws of sockets) {
         const state = this.clientStates.get(ws);
-        if (state?.role === 'admin') {
+        if (state?.role === 'admin' && sameTenant(state.tenantId, tenantId)) {
           this.sendRaw(ws, payload);
         }
       }
@@ -201,11 +202,14 @@ export class WebSocketRealtimeAdapter implements RealtimePort {
   }
 
   /** Broadcast event to every connected socket regardless of role. */
-  broadcastToAll(event: RealtimeEvent): void {
+  broadcastToAll(event: RealtimeEvent, tenantId?: string): void {
     const payload = JSON.stringify(event);
     for (const sockets of this.connections.values()) {
       for (const ws of sockets) {
-        this.sendRaw(ws, payload);
+        const state = this.clientStates.get(ws);
+        if (sameTenant(state?.tenantId, tenantId)) {
+          this.sendRaw(ws, payload);
+        }
       }
     }
   }
@@ -246,6 +250,7 @@ export class WebSocketRealtimeAdapter implements RealtimePort {
       username: agent.username,
       name: agent.name,
       role: agent.role ?? 'agent',
+      ...(agent.tenantId ? { tenantId: agent.tenantId } : {}),
       lastActivityAt: Date.now(),
     };
     this.clientStates.set(ws, state);
@@ -327,6 +332,8 @@ export class WebSocketRealtimeAdapter implements RealtimePort {
     for (const sockets of this.connections.values()) {
       for (const ws of sockets) {
         if (ws === senderWs) continue;
+        const state = this.clientStates.get(ws);
+        if (!sameTenant(state?.tenantId, sender.tenantId)) continue;
         this.sendRaw(ws, payload);
       }
     }
@@ -360,4 +367,17 @@ export class WebSocketRealtimeAdapter implements RealtimePort {
       ws.send(payload);
     }
   }
+}
+
+function platformTenantId(): string {
+  return (
+    process.env['CHATBOT_TENANT_ID']?.trim() ||
+    process.env['ECOMMERCE_TENANT_ID']?.trim() ||
+    'b14b2a6d-ff01-57e4-9004-7ece99dc46d9'
+  );
+}
+
+function sameTenant(socketTenantId: string | undefined, eventTenantId: string | undefined): boolean {
+  const platform = platformTenantId();
+  return (socketTenantId || platform) === (eventTenantId || platform);
 }

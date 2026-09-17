@@ -1,4 +1,5 @@
 import type { OutboundInteractiveListMessage } from '../ports/messaging-provider.port.js';
+import { currentWhatsAppAccount } from '../../infrastructure/whatsapp/tenant-whatsapp-registry.js';
 
 /** list_reply.id values for the main bot menu. */
 export const MENU_ROW_IDS = {
@@ -32,12 +33,21 @@ export const NM_WELCOME_MESSAGE =
   '4️⃣ Adulto mayor\n\n' +
   '👉 Respóndenos con el número de la opción y te mostraremos los modelos disponibles, precios y tallas. 😊';
 
+function usesMaritexCopy(): boolean {
+  const account = currentWhatsAppAccount();
+  return !account || account.isPlatform;
+}
+
 function botName(): string {
-  return process.env['BOT_NAME'] ?? 'Malu';
+  return currentWhatsAppAccount()?.botName?.trim() || process.env['BOT_NAME'] || 'Malu';
 }
 
 function storeUrl(): string {
-  return (process.env['STORE_URL'] ?? 'https://novedadesmaritex.net.pe').replace(/\/$/, '');
+  const fromTenant = currentWhatsAppAccount()?.storeUrl?.trim();
+  const fallback = usesMaritexCopy()
+    ? (process.env['STORE_URL'] ?? 'https://novedadesmaritex.net.pe')
+    : '';
+  return (fromTenant || fallback).replace(/\/$/, '');
 }
 
 export function isGreeting(text: string): boolean {
@@ -50,6 +60,16 @@ export function isMainMenuTrigger(text: string, _isFirstMessage: boolean): boole
 }
 
 export function getWelcomeMessage(): string {
+  const account = currentWhatsAppAccount();
+  if (account && !account.isPlatform) {
+    if (account.welcomeMessage?.trim()) return account.welcomeMessage.trim();
+    const store = storeUrl();
+    return (
+      `👋 ¡Hola! Soy ${botName()}.\n\n` +
+      '¿En qué puedo ayudarte hoy? Escribe *menú* para ver opciones' +
+      (store ? ` o visita nuestra tienda:\n👉 ${store}` : '.')
+    );
+  }
   return NM_WELCOME_MESSAGE;
 }
 
@@ -60,6 +80,16 @@ export const MENU_INTENT_PHRASES: Record<MenuSelection, string> = {
   [MENU_ROW_IDS.HANDOFF]: 'Quiero hablar con un asesor',
   [MENU_ROW_IDS.CONTACT]: '¿Cómo puedo contactar a Maritex?',
 };
+
+export function menuIntentPhrases(): Record<MenuSelection, string> {
+  if (usesMaritexCopy()) return MENU_INTENT_PHRASES;
+  return {
+    [MENU_ROW_IDS.CATALOG]: 'Quiero ver el catálogo de productos',
+    [MENU_ROW_IDS.STORE]: 'Quiero ir a la tienda online',
+    [MENU_ROW_IDS.HANDOFF]: 'Quiero hablar con un asesor',
+    [MENU_ROW_IDS.CONTACT]: '¿Cómo puedo contactarlos?',
+  };
+}
 
 export function parseMenuSelection(interactiveReplyId: string | undefined): MenuSelection | null {
   if (!interactiveReplyId) return null;
@@ -106,9 +136,11 @@ export function getCategoryDigitResponse(digit: '1' | '2' | '3' | '4'): string {
 
 export function buildMainMenuList(to: string): OutboundInteractiveListMessage {
   const name = botName();
+  const storeHost = storeUrl().replace(/^https?:\/\//, '') || 'Tienda online';
+  const brand = usesMaritexCopy() ? 'Maritex' : name;
   return {
     to,
-    body: `¡Hola! Soy ${name} de Maritex. ¿En qué puedo ayudarte hoy?`,
+    body: `¡Hola! Soy ${name}${usesMaritexCopy() ? ' de Maritex' : ''}. ¿En qué puedo ayudarte hoy?`,
     buttonText: 'Ver opciones',
     sections: [
       {
@@ -117,12 +149,12 @@ export function buildMainMenuList(to: string): OutboundInteractiveListMessage {
           {
             id: MENU_ROW_IDS.CATALOG,
             title: 'Ver catálogo',
-            description: 'Productos y categorías',
+            description: usesMaritexCopy() ? 'Productos y categorías' : 'Ver la tienda',
           },
           {
             id: MENU_ROW_IDS.STORE,
             title: 'Tienda online',
-            description: 'novedadesmaritex.net.pe',
+            description: storeHost,
           },
           {
             id: MENU_ROW_IDS.HANDOFF,
@@ -132,7 +164,7 @@ export function buildMainMenuList(to: string): OutboundInteractiveListMessage {
           {
             id: MENU_ROW_IDS.CONTACT,
             title: 'Contacto',
-            description: 'Soporte y tiendas',
+            description: usesMaritexCopy() ? 'Soporte y tiendas' : `Hablar con ${brand}`,
           },
         ],
       },
@@ -155,7 +187,11 @@ export function getCampusLocationFromEnv(): {
 }
 
 export function getStoreLinkMessage(): string {
-  return `Visita nuestra tienda online:\n👉 ${storeUrl()}`;
+  const url = storeUrl();
+  if (!url) {
+    return 'Aún no tenemos tienda online configurada. Un asesor puede ayudarte si lo necesitas.';
+  }
+  return `Visita nuestra tienda online:\n👉 ${url}`;
 }
 
 export function isInteractiveHandoffEnabled(): boolean {

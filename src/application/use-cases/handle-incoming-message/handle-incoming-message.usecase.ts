@@ -31,7 +31,7 @@ import {
   getStoreLinkMessage,
   isInteractiveHandoffEnabled,
   MENU_ROW_IDS,
-  MENU_INTENT_PHRASES,
+  menuIntentPhrases,
   HANDOFF_BUTTON_IDS,
   type MenuSelection,
 } from '../../services/bot-menu.service.js';
@@ -46,6 +46,7 @@ import { Message } from '../../../domain/entities/message.entity.js';
 import type { MessageContentType } from '../../../domain/entities/message.entity.js';
 import { Conversation } from '../../../domain/entities/conversation.entity.js';
 import type { MetaMediaService } from '../../../infrastructure/webhooks/meta/meta-media.service.js';
+import { currentWhatsAppAccount } from '../../../infrastructure/whatsapp/tenant-whatsapp-registry.js';
 import {
   SendProgramBrochureUseCase,
   isBrochureRequest,
@@ -106,26 +107,69 @@ import {
 const CONTEXT_WINDOW_SIZE = 10;
 const MAX_CONSECUTIVE_HANDOFFS = 3;
 
+type MetaMediaPort = Pick<MetaMediaService, 'downloadMedia' | 'uploadMedia'>;
+
 /** IntentRouter canned replies when DB prompts fail — hybrid chat should take over instead. */
 const ROUTER_FALLBACK_PATTERN =
   /no pude procesar esa consulta|no pude obtener esa informaci[oó]n/i;
 
 function botName(): string {
-  return process.env['BOT_NAME'] ?? 'Malu';
+  return currentWhatsAppAccount()?.botName?.trim() || process.env['BOT_NAME'] || 'Malu';
 }
 
-const FALLBACK_SYSTEM_PROMPT =
-  `Eres ${botName()}, asistente virtual de Maritex (Novedades Maritex). Responde de manera concisa, amable y en el mismo idioma que el usuario. Usa texto plano sin markdown porque el canal es WhatsApp. ` +
-  'REGLA CRITICA: Cuando no tengas informacion suficiente o el usuario pida hablar con un asesor, tu respuesta debe ser EXCLUSIVAMENTE el token: HANDOFF_TRIGGER — sin ningún texto antes ni después.';
+function usesMaritexBrain(): boolean {
+  const account = currentWhatsAppAccount();
+  return !account || account.isPlatform;
+}
 
-const HANDOFF_CONFIRMATION_MSG =
-  '¿Deseas que te contacte un asesor de Maritex para brindarte información personalizada?';
+function tenantBrainSystemPrompt(): string {
+  const account = currentWhatsAppAccount();
+  const name = botName();
+  const store = account?.storeUrl?.replace(/\/$/, '') ?? '';
+  const knowledge = account?.knowledge?.trim();
+  return (
+    `Eres ${name}, asistente virtual de esta tienda. Responde de manera concisa, amable y en el mismo idioma que el usuario. Usa texto plano sin markdown porque el canal es WhatsApp.\n` +
+    (store ? `Tienda online: ${store}\n` : '') +
+    (knowledge
+      ? `Conocimiento de la tienda:\n${knowledge}\n`
+      : 'No tienes el catálogo ni el knowledge_base de Maritex.\n') +
+    'Nunca inventes precios ni stock. Si no tienes la información o el usuario pide un asesor, responde EXCLUSIVAMENTE el token: HANDOFF_TRIGGER'
+  );
+}
+
+function fallbackSystemPrompt(): string {
+  const name = botName();
+  const account = currentWhatsAppAccount();
+  if (account && !account.isPlatform) {
+    return (
+      `Eres ${name}, asistente virtual. Responde de manera concisa, amable y en el mismo idioma que el usuario. Usa texto plano sin markdown porque el canal es WhatsApp. ` +
+      'REGLA CRITICA: Cuando no tengas informacion suficiente o el usuario pida hablar con un asesor, tu respuesta debe ser EXCLUSIVAMENTE el token: HANDOFF_TRIGGER — sin ningún texto antes ni después.'
+    );
+  }
+  return (
+    `Eres ${name}, asistente virtual de Maritex (Novedades Maritex). Responde de manera concisa, amable y en el mismo idioma que el usuario. Usa texto plano sin markdown porque el canal es WhatsApp. ` +
+    'REGLA CRITICA: Cuando no tengas informacion suficiente o el usuario pida hablar con un asesor, tu respuesta debe ser EXCLUSIVAMENTE el token: HANDOFF_TRIGGER — sin ningún texto antes ni después.'
+  );
+}
+
+function handoffConfirmationMsg(): string {
+  const account = currentWhatsAppAccount();
+  if (account && !account.isPlatform) {
+    return '¿Deseas que te contacte un asesor para brindarte información personalizada?';
+  }
+  return '¿Deseas que te contacte un asesor de Maritex para brindarte información personalizada?';
+}
+
+function handoffLoopMsg(): string {
+  const account = currentWhatsAppAccount();
+  if (account && !account.isPlatform) {
+    return 'Veo que no he podido darte la información que buscas. Un asesor se pondrá en contacto contigo para ayudarte de forma personalizada.';
+  }
+  return 'Veo que no he podido darte la información que buscas. Un asesor de Maritex se pondrá en contacto contigo para ayudarte de forma personalizada.';
+}
 
 const HANDOFF_DECLINED_MSG =
   'Entendido, con gusto seguiré ayudándote. ¿En qué más puedo asistirte?';
-
-const HANDOFF_LOOP_MSG =
-  'Veo que no he podido darte la información que buscas. Un asesor de Maritex se pondrá en contacto contigo para ayudarte de forma personalizada.';
 
 const DEFAULT_AUTO_REPLY_UNSUPPORTED_MEDIA =
   'Recibí tu archivo. Por favor cuéntame en texto tu consulta o espera a un asesor.';
@@ -149,7 +193,7 @@ export class HandleIncomingMessageUseCase {
     private readonly funnelMessageRepo?: FunnelMessageMongoRepository,
     private readonly messageRepo?: MessageRepository,
     private readonly realtimeNotifier?: RealtimeNotifier,
-    private readonly metaMediaService?: MetaMediaService,
+    private readonly metaMediaService?: MetaMediaPort,
     private readonly mediaStorage?: MediaStoragePort,
     private readonly sendProgramBrochure?: SendProgramBrochureUseCase,
     /** Primary hybrid engine (knowledge_base.md + Mongo tool calling) for menu routes and router fallbacks. */
@@ -169,8 +213,13 @@ export class HandleIncomingMessageUseCase {
 
   async execute(dto: HandleIncomingMessageDto): Promise<HandleIncomingMessageResult> {
     const phoneNumber = PhoneNumber.create(dto.fromPhoneNumber);
+    const account = currentWhatsAppAccount();
 
-    const existingConversation = await this.conversationRepo.findActiveByPhoneNumber(phoneNumber.value);
+    const existingConversation = await this.conversationRepo.findActiveByPhoneNumber(
+      phoneNumber.value,
+      account?.tenantId,
+      account?.isPlatform,
+    );
     if (
       !shouldBotRespondToInbound({
         content: dto.content,
@@ -232,7 +281,14 @@ export class HandleIncomingMessageUseCase {
         lastAgentMessageAt: null,
         unreadCountAgent: 0,
         careerId: null,
-        metaData: null,
+        metaData: account
+          ? {
+              filterType: null,
+              filterValue: '',
+              tenantId: account.tenantId,
+              phoneNumberId: account.phoneNumberId,
+            }
+          : null,
         currentProgramName: null,
         labels: [],
         pinned: false,
@@ -364,7 +420,7 @@ export class HandleIncomingMessageUseCase {
 
     // ── Welcome menu digit (1–4) → fixed category reply without AI ─────────
     const categoryDigit = parseCategoryDigitSelection(dto.content);
-    if (categoryDigit) {
+    if (categoryDigit && usesMaritexBrain()) {
       this.messageDebouncer?.cancel(phoneNumber.value);
       return this.deliverBotTextResponse({
         conversation,
@@ -383,6 +439,7 @@ export class HandleIncomingMessageUseCase {
 
     // ── F7: explicit brochure request → send PDF or link without AI ────────
     if (
+      usesMaritexBrain() &&
       this.sendProgramBrochure &&
       (dto.contentType ?? 'text') === 'text' &&
       isBrochureRequest(dto.content)
@@ -659,7 +716,7 @@ export class HandleIncomingMessageUseCase {
     let newProgramName = conversation.currentProgramName;
     let purchaseCategory: string | null = null;
 
-    if (this.intentRouter) {
+    if (this.intentRouter && usesMaritexBrain()) {
       try {
         const routerResult = await this.intentRouter.route({
           messages: conversation.messages,
@@ -747,7 +804,7 @@ export class HandleIncomingMessageUseCase {
           phoneNumberValue,
           funnelUserId: resolvedFunnelUserId,
           handoffBy: 'bot',
-          leadMessage: HANDOFF_LOOP_MSG,
+          leadMessage: handoffLoopMsg(),
           userMessage,
         });
       }
@@ -908,9 +965,24 @@ export class HandleIncomingMessageUseCase {
 
     switch (selection) {
       case MENU_ROW_IDS.CATALOG:
+        if (!usesMaritexBrain()) {
+          return this.deliverBotTextResponse({
+            conversation,
+            phoneNumberValue,
+            funnelUserId,
+            userMessage,
+            aiContent: getStoreLinkMessage() || getWelcomeMessage(),
+            aiModel: 'menu-catalog',
+            aiTokens: 0,
+            newCareerId: conversation.careerId,
+            newMetaData: conversation.metaData,
+            newProgramName: conversation.currentProgramName,
+            purchaseCategory: null,
+          });
+        }
         return this.handleMenuIntentRoute(
           conversation, phoneNumberValue, funnelUserId, userMessage,
-          'INFO_PROGRAM', MENU_INTENT_PHRASES[MENU_ROW_IDS.CATALOG],
+          'INFO_PROGRAM', menuIntentPhrases()[MENU_ROW_IDS.CATALOG],
         );
       case MENU_ROW_IDS.STORE:
         return this.deliverBotTextResponse({
@@ -934,6 +1006,21 @@ export class HandleIncomingMessageUseCase {
           userMessage,
         });
       case MENU_ROW_IDS.CONTACT:
+        if (!usesMaritexBrain()) {
+          return this.deliverBotTextResponse({
+            conversation,
+            phoneNumberValue,
+            funnelUserId,
+            userMessage,
+            aiContent: getStoreLinkMessage() || getWelcomeMessage(),
+            aiModel: 'menu-contact',
+            aiTokens: 0,
+            newCareerId: conversation.careerId,
+            newMetaData: conversation.metaData,
+            newProgramName: conversation.currentProgramName,
+            purchaseCategory: null,
+          });
+        }
         return this.sendCampusLocationReply({
           conversation,
           phoneNumberValue,
@@ -1245,7 +1332,7 @@ export class HandleIncomingMessageUseCase {
     to: string,
     customBody?: string,
   ): Promise<{ messageId: string; body: string }> {
-    const prompt = customBody?.trim() || HANDOFF_CONFIRMATION_MSG;
+    const prompt = customBody?.trim() || handoffConfirmationMsg();
 
     if (isInteractiveHandoffEnabled() && this.messagingProvider.sendInteractiveButtons) {
       const result = await this.messagingProvider.sendInteractiveButtons({
@@ -1892,6 +1979,24 @@ export class HandleIncomingMessageUseCase {
     return history;
   }
 
+  private async runTenantBrainChat(
+    conversation: Conversation,
+    lastUserOverride?: string,
+    collapseTrailingUserMessages?: number,
+  ): Promise<{ content: string; model: string; totalTokens: number }> {
+    const messages: ChatMessage[] = [
+      { role: 'system', content: withCurrentDateContext(tenantBrainSystemPrompt()) },
+      ...this.buildHybridChatHistory(conversation, lastUserOverride, collapseTrailingUserMessages),
+    ];
+    const result = await this.aiProvider.complete(messages);
+    const structured = parseStructuredAiResponse(result.content);
+    return {
+      content: structured.message,
+      model: result.model,
+      totalTokens: result.totalTokens,
+    };
+  }
+
   private async runHybridChat(
     conversation: Conversation,
     lastUserOverride?: string,
@@ -1907,6 +2012,10 @@ export class HandleIncomingMessageUseCase {
       overrideLastUser: !!lastUserOverride,
       collapseTrailingUserMessages: collapseTrailingUserMessages ?? 0,
     });
+
+    if (!usesMaritexBrain()) {
+      return this.runTenantBrainChat(conversation, lastUserOverride, collapseTrailingUserMessages);
+    }
 
     const result = await this.hybridChat.chat(
       this.buildHybridChatHistory(conversation, lastUserOverride, collapseTrailingUserMessages),
@@ -1937,9 +2046,10 @@ export class HandleIncomingMessageUseCase {
     // Hybrid-architecture guardrail: overlay the static knowledge base + strict anti-hallucination
     // rule on top of whatever base prompt was resolved above — never invent costs/malla/vacantes,
     // always call the tool. This mirrors IntentRouterService's behavior for the fallback path.
+    const overlay = usesMaritexBrain() ? this.knowledgeBaseOverlay : undefined;
     const systemPrompt = withCurrentDateContext(
-      this.knowledgeBaseOverlay
-        ? `${baseSystemPrompt}\n\n${this.knowledgeBaseOverlay}`
+      overlay
+        ? `${baseSystemPrompt}\n\n${overlay}`
         : baseSystemPrompt,
     );
 
@@ -1950,7 +2060,7 @@ export class HandleIncomingMessageUseCase {
     }));
     const messages = [{ role: 'system' as const, content: systemPrompt }, ...chatHistory];
 
-    if (!this.productToolsService) {
+    if (!this.productToolsService || !usesMaritexBrain()) {
       const result = await this.aiProvider.complete(messages);
       return { content: result.content, model: result.model, totalTokens: result.totalTokens };
     }
@@ -2078,7 +2188,7 @@ export class HandleIncomingMessageUseCase {
 
     if (!this.programRepo || !this.promptBuilder) {
       logger.warn('[HandleIncomingMessage] Using Maritex fallback prompt');
-      return FALLBACK_SYSTEM_PROMPT;
+      return fallbackSystemPrompt();
     }
     try {
       const programs = await this.programRepo.findActive();

@@ -73,6 +73,7 @@ export class HandleMessageStatusUseCase {
           status: updatedMessage.status,
           deliveredAt: updatedMessage.deliveredAt,
           readAt: updatedMessage.readAt,
+          ...(conversation.metaData?.tenantId ? { tenantId: conversation.metaData.tenantId } : {}),
         });
       }
     }

@@ -55,7 +55,7 @@ LABEL org.opencontainers.image.description="Chatbot NM — Maritex WhatsApp, Nod
 LABEL org.opencontainers.image.vendor="Novedades Maritex"
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-RUN apk add --no-cache openssl libc6-compat wget
+RUN apk add --no-cache openssl libc6-compat wget tzdata
 
 WORKDIR /app
 
@@ -72,6 +72,7 @@ RUN mkdir -p /app/uploads /app/logs && chown -R appuser:appgroup /app/uploads /a
 
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV TZ=America/Lima
 ENV ADMIN_PANEL_DIST=/app/admin/dist
 
 USER appuser

@@ -118,6 +118,7 @@ export interface ParsedWhatsAppInboundMessage {
   externalMessageId: string;
   timestampMs: number;
   contentType: ParsedMessageContentType;
+  phoneNumberId?: string;
   mediaId?: string;
   mimeType?: string;
   fileName?: string;
@@ -137,4 +138,5 @@ export interface ParsedWhatsAppStatusUpdate {
   status: 'sent' | 'delivered' | 'read' | 'failed';
   timestampMs: number;
   recipientId: string;
+  phoneNumberId?: string;
 }

@@ -5,6 +5,8 @@ import type { MetaMediaService } from '../../../infrastructure/webhooks/meta/met
 import type { Program } from '../../../domain/entities/program.entity.js';
 import { logger } from '../../../infrastructure/shared/logger.js';
 
+type MetaMediaPort = Pick<MetaMediaService, 'downloadMedia' | 'uploadMedia'>;
+
 export interface SendProgramBrochureInput {
   to: string;
   programId?: string;
@@ -43,7 +45,7 @@ export class SendProgramBrochureUseCase {
   constructor(
     private readonly programRepo: ProgramRepository,
     private readonly messagingProvider: MessagingProviderPort,
-    private readonly metaMediaService: MetaMediaService,
+    private readonly metaMediaService: MetaMediaPort,
   ) {}
 
   async execute(input: SendProgramBrochureInput): Promise<SendProgramBrochureOutput> {

@@ -1,6 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import type { AgentRepository } from '../../../domain/repositories/agent.repository.js';
-import type { AgentRole } from '../../../domain/entities/agent.entity.js';
+import { Agent, type AgentRole } from '../../../domain/entities/agent.entity.js';
 import { signAgentToken } from '../../services/agent-token.service.js';
 import { UnauthorizedError } from './login-agent.usecase.js';
 
@@ -12,6 +13,8 @@ interface ErpJwtPayload extends jwt.JwtPayload {
   tenantId?: string;
   warehouseId?: string;
   roles?: string[];
+  enabledPackages?: string[];
+  exp?: number;
 }
 
 export interface SsoErpLoginInput {
@@ -33,7 +36,7 @@ export class SsoErpLoginUseCase {
   constructor(private readonly agentRepo: AgentRepository) {}
 
   async execute(input: SsoErpLoginInput): Promise<SsoErpLoginOutput> {
-    const erpSecret = process.env['ERP_JWT_SECRET'] ?? process.env['JWT_SECRET'];
+    const erpSecret = process.env['ERP_JWT_SECRET'];
     if (!erpSecret) {
       throw new Error('ERP_JWT_SECRET not configured');
     }
@@ -50,19 +53,22 @@ export class SsoErpLoginUseCase {
       throw new UnauthorizedError('No tienes acceso al panel de chatbot');
     }
 
+    const isSuperAdmin = roles.includes('Super Admin');
+    const packages = payload.enabledPackages ?? [];
+    if (!isSuperAdmin && !packages.includes('CHATBOT')) {
+      throw new UnauthorizedError(
+        'Este cliente no tiene el paquete Chatbot. Pídele a Super Admin que lo active e Integraciones.',
+      );
+    }
+
     const username = payload.username?.toLowerCase().trim();
     if (!username) {
       throw new UnauthorizedError('Token ERP inválido');
     }
 
-    let agent =
-      (await this.agentRepo.findByUsername(username)) ??
-      (await this.resolveAgentByUserId(payload.sub));
-
+    let agent = await this.resolveAgentByUserId(payload.sub);
     if (!agent) {
-      throw new UnauthorizedError(
-        'No hay un agente de chatbot vinculado a tu usuario ERP. Contacte al administrador.',
-      );
+      agent = await this.provisionAgent(payload, username, roles);
     }
 
     if (agent.status !== 'Active') {
@@ -72,7 +78,9 @@ export class SsoErpLoginUseCase {
     await this.agentRepo.updateLastLogin(agent.id);
 
     const expiresIn = resolveChatbotTokenTtl(payload.exp);
-    const token = signAgentToken(agent, expiresIn);
+    const token = payload.tenantId
+      ? signAgentToken(agent, expiresIn, payload.tenantId)
+      : signAgentToken(agent, expiresIn);
     const agentUsername = agent.username ?? username;
 
     return {
@@ -90,6 +98,30 @@ export class SsoErpLoginUseCase {
   private async resolveAgentByUserId(userId: string) {
     const agents = await this.agentRepo.findByUserId(userId);
     return agents[0] ?? null;
+  }
+
+  private async provisionAgent(
+    payload: ErpJwtPayload,
+    username: string,
+    roles: string[],
+  ): Promise<Agent> {
+    const tenantSuffix = (payload.tenantId ?? randomUUID()).replace(/-/g, '').slice(0, 8);
+    const scopedUsername = `${username}.${tenantSuffix}`.toLowerCase();
+    const now = new Date();
+    const agent = Agent.create({
+      id: randomUUID(),
+      name: payload.username,
+      email: `${scopedUsername}@chatbot.local`,
+      whatsapp: '+51900000000',
+      status: 'Active',
+      userId: payload.sub,
+      username: scopedUsername,
+      lastLoginAt: now,
+      role: roles.includes('Super Admin') || roles.includes('Admin') ? 'admin' : 'agent',
+      createdAt: now,
+      updatedAt: now,
+    });
+    return this.agentRepo.save(agent);
   }
 }
 

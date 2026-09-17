@@ -20,7 +20,11 @@ export class ConversationMongoRepository implements ConversationRepository {
     return this.toDomain(doc, messages);
   }
 
-  async findActiveByPhoneNumber(phoneNumber: string): Promise<Conversation | null> {
+  async findActiveByPhoneNumber(
+    phoneNumber: string,
+    _tenantId?: string,
+    _isPlatformTenant?: boolean,
+  ): Promise<Conversation | null> {
     const doc = await ConversationModel.findOne({ phoneNumber, status: 'active' }).lean();
     if (!doc) return null;
     const messages = await this.loadMessages(String(doc._id));
@@ -174,6 +178,22 @@ export class ConversationMongoRepository implements ConversationRepository {
     if (filters.label) {
       const escaped = filters.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       clauses.push({ labels: { $regex: escaped, $options: 'i' } });
+    }
+
+    if (filters.tenantId) {
+      const match = { 'metaData.tenantId': filters.tenantId };
+      if (filters.isPlatformTenant) {
+        clauses.push({
+          $or: [
+            match,
+            { 'metaData.tenantId': { $exists: false } },
+            { 'metaData.tenantId': null },
+            { metaData: null },
+          ],
+        });
+      } else {
+        clauses.push(match);
+      }
     }
 
     return clauses.length === 1 ? baseWithArchived : { $and: clauses };

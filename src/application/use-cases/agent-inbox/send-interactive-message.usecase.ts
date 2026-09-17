@@ -114,6 +114,7 @@ export class SendInteractiveMessageUseCase {
       conversationMode: conversation.mode,
       assignedAgentId: conversation.assignedAgentId,
       message: agentMsg,
+      ...(conversation.metaData?.tenantId ? { tenantId: conversation.metaData.tenantId } : {}),
     });
 
     await this.funnelMessageRepo.saveAgentMessage({

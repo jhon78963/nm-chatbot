@@ -86,9 +86,11 @@ export class WhatsAppParserService {
       return null;
     }
     const profileName = this.resolveProfileName(value.contacts, waId);
+    const phoneNumberId = value.metadata?.phone_number_id?.trim();
     const base = {
       waId,
       ...(profileName !== undefined && { profileName }),
+      ...(phoneNumberId ? { phoneNumberId } : {}),
       externalMessageId: message.id,
       timestampMs: Number.parseInt(message.timestamp, 10) * 1000,
     };
@@ -236,6 +238,9 @@ export class WhatsAppParserService {
         status: status.status,
         timestampMs: Number.parseInt(status.timestamp, 10) * 1000,
         recipientId: status.recipient_id,
+        ...(value.metadata?.phone_number_id?.trim()
+          ? { phoneNumberId: value.metadata.phone_number_id.trim() }
+          : {}),
       }));
   }
 

@@ -2,6 +2,7 @@ import type { RealtimePort, RealtimeEvent, MessageEventData } from '../ports/rea
 import type { Message } from '../../domain/entities/message.entity.js';
 import type { ConversationMode } from '../../domain/entities/conversation.entity.js';
 import type { MessageStatus } from '../../domain/entities/message.entity.js';
+import { currentWhatsAppAccount } from '../../infrastructure/whatsapp/tenant-whatsapp-registry.js';
 
 /**
  * Application service that decides who should receive a realtime event
@@ -19,13 +20,14 @@ export class RealtimeNotifier {
     conversationMode: ConversationMode;
     assignedAgentId: string | null;
     message: Message;
+    tenantId?: string;
   }): void {
     const event: RealtimeEvent = {
       type: 'message.new',
       conversationId: params.conversationId,
       message: this.toEventData(params.message),
     };
-    this.fanOut(event, params.conversationMode, params.assignedAgentId);
+    this.fanOut(event, params.conversationMode, params.assignedAgentId, params.tenantId);
   }
 
   notifyMessageStatus(params: {
@@ -36,6 +38,7 @@ export class RealtimeNotifier {
     status: MessageStatus;
     deliveredAt: Date | undefined;
     readAt: Date | undefined;
+    tenantId?: string;
   }): void {
     const base = {
       type: 'message.status' as const,
@@ -51,7 +54,7 @@ export class RealtimeNotifier {
         }
       : base;
 
-    this.fanOut(event, params.conversationMode, params.assignedAgentId);
+    this.fanOut(event, params.conversationMode, params.assignedAgentId, params.tenantId);
   }
 
   notifyConversationRead(params: {
@@ -59,13 +62,14 @@ export class RealtimeNotifier {
     conversationMode: ConversationMode;
     assignedAgentId: string | null;
     unreadCountAgent: number;
+    tenantId?: string;
   }): void {
     const event: RealtimeEvent = {
       type: 'conversation.read',
       conversationId: params.conversationId,
       unreadCountAgent: params.unreadCountAgent,
     };
-    this.fanOut(event, params.conversationMode, params.assignedAgentId);
+    this.fanOut(event, params.conversationMode, params.assignedAgentId, params.tenantId);
   }
 
   // ─── Private ────────────────────────────────────────────────────────────────
@@ -74,16 +78,17 @@ export class RealtimeNotifier {
     event: RealtimeEvent,
     mode: ConversationMode,
     assignedAgentId: string | null,
+    tenantId?: string,
   ): void {
+    const scope = tenantId ?? currentWhatsAppAccount()?.tenantId;
     if (mode === 'bot') {
-      this.realtime.broadcastToAll(event);
+      this.realtime.broadcastToAll(event, scope);
     } else {
       if (assignedAgentId !== null) {
-        this.realtime.broadcastToAdmins(event);
+        this.realtime.broadcastToAdmins(event, scope);
         this.realtime.sendToAgent(assignedAgentId, event);
       } else {
-        // Unassigned human handoff — notify all agents so someone can claim the chat.
-        this.realtime.broadcastToAll(event);
+        this.realtime.broadcastToAll(event, scope);
       }
     }
   }
