@@ -26,6 +26,8 @@ export interface ListAgentInboxInput {
   label?: string;
   /** C15 — include archived (admin only) */
   includeArchived?: boolean;
+  tenantId?: string;
+  isPlatformTenant?: boolean;
 }
 
 export interface ListAgentInboxOutput {
@@ -108,6 +110,10 @@ export class ListAgentInboxUseCase {
       ...(searchPhoneNumbers?.length && { searchPhoneNumbers }),
       ...(input.label?.trim() && { label: input.label.trim() }),
       ...(input.includeArchived && { includeArchived: true }),
+      ...(input.tenantId?.trim() && {
+        tenantId: input.tenantId.trim(),
+        isPlatformTenant: input.isPlatformTenant === true,
+      }),
     });
   }
 
@@ -122,8 +128,9 @@ export class ListAgentInboxUseCase {
     filters: Awaited<ReturnType<typeof this.resolveFilters>>,
   ): Promise<ListAgentInboxOutput> {
     const since = input.since ?? startOfCurrentMonth();
+    const skipFunnelLeads = Boolean(input.tenantId) && input.isPlatformTenant !== true;
 
-    if (this.hasConversationFilters(input)) {
+    if (this.hasConversationFilters(input) || skipFunnelLeads) {
       const pagination = { limit, offset, ...(filters !== undefined && { filters }) };
       const [conversations, total] = await Promise.all([
         this.conversationRepo.findAdminInbox({ since, ...pagination }),

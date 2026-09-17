@@ -8,6 +8,7 @@ declare namespace Express {
       username: string;
       name: string;
       role: 'agent' | 'admin';
+      tenantId?: string;
     };
   }
 }

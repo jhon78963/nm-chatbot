@@ -7,6 +7,7 @@ export interface AgentJwtPayload {
   username: string;
   name: string;
   role?: AgentRole;
+  tenantId?: string;
 }
 
 /**
@@ -43,6 +44,7 @@ export function authenticateAgentJwt(req: Request, res: Response, next: NextFunc
       username: payload.username,
       name: payload.name,
       role: payload.role ?? 'agent',
+      tenantId: payload.tenantId,
     };
     next();
   } catch {

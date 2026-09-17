@@ -1,73 +1,86 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
 import { logger } from '../../shared/logger.js';
+import type { TenantWhatsAppRegistry } from '../../whatsapp/tenant-whatsapp-registry.js';
 
-/**
- * Middleware that verifies the HMAC-SHA256 signature sent by Meta on every
- * inbound webhook POST request.
- *
- * Meta signs the raw payload with the app secret and sends the digest in the
- * `x-hub-signature-256` header as `sha256=<hex>`. This middleware recomputes
- * the same digest using `WEBHOOK_SECRET` and rejects any request where the
- * signatures do not match, preventing spoofed payloads from reaching the
- * controller.
- *
- * Requires `req.rawBody` to be populated by the `verify` callback registered
- * on `express.json()` in the server setup.
- */
-export function verifyMetaSignatureMiddleware(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): void {
-  const secret = process.env['WEBHOOK_SECRET'];
-
-  if (!secret) {
-    logger.error('[VerifyMetaSignature] WEBHOOK_SECRET is not configured');
-    res.sendStatus(500);
-    return;
-  }
-
-  const signatureHeader = req.headers['x-hub-signature-256'];
-
-  if (typeof signatureHeader !== 'string' || !signatureHeader.startsWith('sha256=')) {
-    logger.warn('[VerifyMetaSignature] Missing or malformed x-hub-signature-256 header', {
-      ip: req.ip,
-      path: req.path,
-    });
-    res.sendStatus(403);
-    return;
-  }
-
-  const rawBody = req.rawBody;
-
-  if (!rawBody || rawBody.length === 0) {
-    logger.warn('[VerifyMetaSignature] Raw body unavailable for signature check', {
-      ip: req.ip,
-      path: req.path,
-    });
-    res.sendStatus(403);
-    return;
-  }
-
-  const expectedSignature = `sha256=${createHmac('sha256', secret).update(rawBody).digest('hex')}`;
-
-  const incomingBuffer = Buffer.from(signatureHeader);
-  const expectedBuffer = Buffer.from(expectedSignature);
-
-  // Constant-time comparison to prevent timing-based attacks.
-  const signaturesMatch =
+function signaturesMatch(incoming: string, expected: string): boolean {
+  const incomingBuffer = Buffer.from(incoming);
+  const expectedBuffer = Buffer.from(expected);
+  return (
     incomingBuffer.length === expectedBuffer.length &&
-    timingSafeEqual(incomingBuffer, expectedBuffer);
+    timingSafeEqual(incomingBuffer, expectedBuffer)
+  );
+}
 
-  if (!signaturesMatch) {
-    logger.warn('[VerifyMetaSignature] Signature mismatch — request rejected', {
-      ip: req.ip,
-      path: req.path,
-    });
-    res.sendStatus(403);
-    return;
+function phoneNumberIdFromRawBody(rawBody: Buffer): string | null {
+  try {
+    const payload = JSON.parse(rawBody.toString('utf8')) as {
+      entry?: Array<{
+        changes?: Array<{ value?: { metadata?: { phone_number_id?: string } } }>;
+      }>;
+    };
+    const id = payload.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
+    return typeof id === 'string' && id.trim() ? id.trim() : null;
+  } catch {
+    return null;
   }
+}
 
-  next();
+export function createVerifyMetaSignatureMiddleware(registry: TenantWhatsAppRegistry) {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const signatureHeader = req.headers['x-hub-signature-256'];
+    if (typeof signatureHeader !== 'string' || !signatureHeader.startsWith('sha256=')) {
+      logger.warn('[VerifyMetaSignature] Missing or malformed x-hub-signature-256 header', {
+        ip: req.ip,
+        path: req.path,
+      });
+      res.sendStatus(403);
+      return;
+    }
+
+    const rawBody = req.rawBody;
+    if (!rawBody || rawBody.length === 0) {
+      logger.warn('[VerifyMetaSignature] Raw body unavailable for signature check', {
+        ip: req.ip,
+        path: req.path,
+      });
+      res.sendStatus(403);
+      return;
+    }
+
+    const phoneNumberId = phoneNumberIdFromRawBody(rawBody);
+    const account = phoneNumberId ? await registry.getByPhoneNumberId(phoneNumberId) : null;
+    const secrets = Array.from(
+      new Set(
+        [account?.appSecret?.trim(), account?.isPlatform ? process.env['WEBHOOK_SECRET']?.trim() : undefined].filter(
+          (item): item is string => Boolean(item),
+        ),
+      ),
+    );
+
+    if (secrets.length === 0) {
+      logger.warn('[VerifyMetaSignature] Sin App Secret para este Phone Number ID', {
+        phoneNumberId,
+      });
+      res.sendStatus(403);
+      return;
+    }
+
+    const matched = secrets.some((secret) => {
+      const expectedSignature = `sha256=${createHmac('sha256', secret).update(rawBody).digest('hex')}`;
+      return signaturesMatch(signatureHeader, expectedSignature);
+    });
+
+    if (!matched) {
+      logger.warn('[VerifyMetaSignature] Signature mismatch — request rejected', {
+        ip: req.ip,
+        path: req.path,
+        phoneNumberId,
+      });
+      res.sendStatus(403);
+      return;
+    }
+
+    next();
+  };
 }

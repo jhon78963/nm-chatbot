@@ -53,8 +53,8 @@ export interface RealtimePort {
   sendToAgent(agentId: string, event: RealtimeEvent): void;
 
   /** Broadcast event only to connections whose JWT role is 'admin'. */
-  broadcastToAdmins(event: RealtimeEvent): void;
+  broadcastToAdmins(event: RealtimeEvent, tenantId?: string): void;
 
   /** Broadcast event to every connected socket regardless of role. */
-  broadcastToAll(event: RealtimeEvent): void;
+  broadcastToAll(event: RealtimeEvent, tenantId?: string): void;
 }

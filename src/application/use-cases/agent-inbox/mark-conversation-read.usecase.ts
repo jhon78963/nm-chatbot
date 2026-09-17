@@ -34,6 +34,7 @@ export class MarkConversationReadUseCase {
       conversationMode: conversation.mode,
       assignedAgentId: conversation.assignedAgentId,
       unreadCountAgent: 0,
+      ...(conversation.metaData?.tenantId ? { tenantId: conversation.metaData.tenantId } : {}),
     });
   }
 }

@@ -46,6 +46,7 @@ import { Message } from '../../../domain/entities/message.entity.js';
 import type { MessageContentType } from '../../../domain/entities/message.entity.js';
 import { Conversation } from '../../../domain/entities/conversation.entity.js';
 import type { MetaMediaService } from '../../../infrastructure/webhooks/meta/meta-media.service.js';
+import { currentWhatsAppAccount } from '../../../infrastructure/whatsapp/tenant-whatsapp-registry.js';
 import {
   SendProgramBrochureUseCase,
   isBrochureRequest,
@@ -106,26 +107,49 @@ import {
 const CONTEXT_WINDOW_SIZE = 10;
 const MAX_CONSECUTIVE_HANDOFFS = 3;
 
+type MetaMediaPort = Pick<MetaMediaService, 'downloadMedia' | 'uploadMedia'>;
+
 /** IntentRouter canned replies when DB prompts fail — hybrid chat should take over instead. */
 const ROUTER_FALLBACK_PATTERN =
   /no pude procesar esa consulta|no pude obtener esa informaci[oó]n/i;
 
 function botName(): string {
-  return process.env['BOT_NAME'] ?? 'Malu';
+  return currentWhatsAppAccount()?.botName?.trim() || process.env['BOT_NAME'] || 'Malu';
 }
 
-const FALLBACK_SYSTEM_PROMPT =
-  `Eres ${botName()}, asistente virtual de Maritex (Novedades Maritex). Responde de manera concisa, amable y en el mismo idioma que el usuario. Usa texto plano sin markdown porque el canal es WhatsApp. ` +
-  'REGLA CRITICA: Cuando no tengas informacion suficiente o el usuario pida hablar con un asesor, tu respuesta debe ser EXCLUSIVAMENTE el token: HANDOFF_TRIGGER — sin ningún texto antes ni después.';
+function fallbackSystemPrompt(): string {
+  const name = botName();
+  const account = currentWhatsAppAccount();
+  if (account && !account.isPlatform) {
+    return (
+      `Eres ${name}, asistente virtual. Responde de manera concisa, amable y en el mismo idioma que el usuario. Usa texto plano sin markdown porque el canal es WhatsApp. ` +
+      'REGLA CRITICA: Cuando no tengas informacion suficiente o el usuario pida hablar con un asesor, tu respuesta debe ser EXCLUSIVAMENTE el token: HANDOFF_TRIGGER — sin ningún texto antes ni después.'
+    );
+  }
+  return (
+    `Eres ${name}, asistente virtual de Maritex (Novedades Maritex). Responde de manera concisa, amable y en el mismo idioma que el usuario. Usa texto plano sin markdown porque el canal es WhatsApp. ` +
+    'REGLA CRITICA: Cuando no tengas informacion suficiente o el usuario pida hablar con un asesor, tu respuesta debe ser EXCLUSIVAMENTE el token: HANDOFF_TRIGGER — sin ningún texto antes ni después.'
+  );
+}
 
-const HANDOFF_CONFIRMATION_MSG =
-  '¿Deseas que te contacte un asesor de Maritex para brindarte información personalizada?';
+function handoffConfirmationMsg(): string {
+  const account = currentWhatsAppAccount();
+  if (account && !account.isPlatform) {
+    return '¿Deseas que te contacte un asesor para brindarte información personalizada?';
+  }
+  return '¿Deseas que te contacte un asesor de Maritex para brindarte información personalizada?';
+}
+
+function handoffLoopMsg(): string {
+  const account = currentWhatsAppAccount();
+  if (account && !account.isPlatform) {
+    return 'Veo que no he podido darte la información que buscas. Un asesor se pondrá en contacto contigo para ayudarte de forma personalizada.';
+  }
+  return 'Veo que no he podido darte la información que buscas. Un asesor de Maritex se pondrá en contacto contigo para ayudarte de forma personalizada.';
+}
 
 const HANDOFF_DECLINED_MSG =
   'Entendido, con gusto seguiré ayudándote. ¿En qué más puedo asistirte?';
-
-const HANDOFF_LOOP_MSG =
-  'Veo que no he podido darte la información que buscas. Un asesor de Maritex se pondrá en contacto contigo para ayudarte de forma personalizada.';
 
 const DEFAULT_AUTO_REPLY_UNSUPPORTED_MEDIA =
   'Recibí tu archivo. Por favor cuéntame en texto tu consulta o espera a un asesor.';
@@ -149,7 +173,7 @@ export class HandleIncomingMessageUseCase {
     private readonly funnelMessageRepo?: FunnelMessageMongoRepository,
     private readonly messageRepo?: MessageRepository,
     private readonly realtimeNotifier?: RealtimeNotifier,
-    private readonly metaMediaService?: MetaMediaService,
+    private readonly metaMediaService?: MetaMediaPort,
     private readonly mediaStorage?: MediaStoragePort,
     private readonly sendProgramBrochure?: SendProgramBrochureUseCase,
     /** Primary hybrid engine (knowledge_base.md + Mongo tool calling) for menu routes and router fallbacks. */
@@ -169,8 +193,13 @@ export class HandleIncomingMessageUseCase {
 
   async execute(dto: HandleIncomingMessageDto): Promise<HandleIncomingMessageResult> {
     const phoneNumber = PhoneNumber.create(dto.fromPhoneNumber);
+    const account = currentWhatsAppAccount();
 
-    const existingConversation = await this.conversationRepo.findActiveByPhoneNumber(phoneNumber.value);
+    const existingConversation = await this.conversationRepo.findActiveByPhoneNumber(
+      phoneNumber.value,
+      account?.tenantId,
+      account?.isPlatform,
+    );
     if (
       !shouldBotRespondToInbound({
         content: dto.content,
@@ -232,7 +261,14 @@ export class HandleIncomingMessageUseCase {
         lastAgentMessageAt: null,
         unreadCountAgent: 0,
         careerId: null,
-        metaData: null,
+        metaData: account
+          ? {
+              filterType: null,
+              filterValue: '',
+              tenantId: account.tenantId,
+              phoneNumberId: account.phoneNumberId,
+            }
+          : null,
         currentProgramName: null,
         labels: [],
         pinned: false,
@@ -747,7 +783,7 @@ export class HandleIncomingMessageUseCase {
           phoneNumberValue,
           funnelUserId: resolvedFunnelUserId,
           handoffBy: 'bot',
-          leadMessage: HANDOFF_LOOP_MSG,
+          leadMessage: handoffLoopMsg(),
           userMessage,
         });
       }
@@ -1245,7 +1281,7 @@ export class HandleIncomingMessageUseCase {
     to: string,
     customBody?: string,
   ): Promise<{ messageId: string; body: string }> {
-    const prompt = customBody?.trim() || HANDOFF_CONFIRMATION_MSG;
+    const prompt = customBody?.trim() || handoffConfirmationMsg();
 
     if (isInteractiveHandoffEnabled() && this.messagingProvider.sendInteractiveButtons) {
       const result = await this.messagingProvider.sendInteractiveButtons({
@@ -2078,7 +2114,7 @@ export class HandleIncomingMessageUseCase {
 
     if (!this.programRepo || !this.promptBuilder) {
       logger.warn('[HandleIncomingMessage] Using Maritex fallback prompt');
-      return FALLBACK_SYSTEM_PROMPT;
+      return fallbackSystemPrompt();
     }
     try {
       const programs = await this.programRepo.findActive();

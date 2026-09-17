@@ -8,6 +8,8 @@ export type HandoffBy = 'user' | 'bot' | 'agent' | 'system';
 export interface ConversationMetaData {
   filterType: string | null;
   filterValue: string | string[];
+  tenantId?: string;
+  phoneNumberId?: string;
 }
 
 export interface ConversationProps {

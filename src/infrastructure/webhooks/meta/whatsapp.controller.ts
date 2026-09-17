@@ -13,6 +13,10 @@ import type { WhatsAppParserService } from './whatsapp-parser.service.js';
 import { PhoneNumber } from '../../../domain/value-objects/phone-number.vo.js';
 import { logger } from '../../shared/logger.js';
 import { formatMetaApiError } from './meta-api-error.js';
+import {
+  runWithWhatsAppAccount,
+  type TenantWhatsAppRegistry,
+} from '../../whatsapp/tenant-whatsapp-registry.js';
 
 /**
  * Example Meta status webhook payload (delivery/read receipts):
@@ -43,19 +47,22 @@ export class WhatsAppController {
     private readonly parser: WhatsAppParserService,
     private readonly handleIncomingMessage: HandleIncomingMessageUseCase,
     private readonly handleMessageStatus: HandleMessageStatusUseCase,
-    private readonly verifyToken: string,
+    private readonly registry: TenantWhatsAppRegistry,
   ) {}
 
-  verify(req: Request, res: Response): void {
+  async verify(req: Request, res: Response): Promise<void> {
     const query = req.query as MetaWebhookVerifyQuery;
     const mode = query['hub.mode'];
     const token = query['hub.verify_token'];
     const challenge = query['hub.challenge'];
 
-    if (mode === 'subscribe' && token === this.verifyToken) {
-      logger.info('[WhatsApp] Webhook verified successfully');
-      res.status(200).send(challenge);
-      return;
+    if (mode === 'subscribe' && token) {
+      const account = await this.registry.getByVerifyToken(token);
+      if (account) {
+        logger.info('[WhatsApp] Webhook verified successfully', { tenantId: account.tenantId });
+        res.status(200).send(challenge);
+        return;
+      }
     }
 
     logger.warn('[WhatsApp] Webhook verification failed', { mode, token });
@@ -85,11 +92,18 @@ export class WhatsAppController {
 
   private async dispatchStatusUpdate(status: ParsedWhatsAppStatusUpdate): Promise<void> {
     try {
-      await this.handleMessageStatus.execute({
-        externalMessageId: status.externalMessageId,
-        status: status.status,
-        timestampMs: status.timestampMs,
-      });
+      const account = await this.registry.getByPhoneNumberId(status.phoneNumberId);
+      const run = () =>
+        this.handleMessageStatus.execute({
+          externalMessageId: status.externalMessageId,
+          status: status.status,
+          timestampMs: status.timestampMs,
+        });
+      if (account) {
+        await runWithWhatsAppAccount(account, run);
+      } else {
+        await run();
+      }
     } catch (err) {
       logger.error('[WhatsApp] Error processing status webhook', {
         externalMessageId: status.externalMessageId,
@@ -101,41 +115,15 @@ export class WhatsAppController {
 
   private async dispatchToAiFlow(message: ParsedWhatsAppInboundMessage): Promise<void> {
     try {
-      const fromPhoneNumber = this.toE164(message.waId);
-
-      if (!PhoneNumber.isPeruvian(fromPhoneNumber)) {
-        logger.info('[WhatsApp] Ignoring message from non-Peruvian number', {
-          waId: message.waId,
-          fromPhoneNumber,
-          messageId: message.externalMessageId,
+      const account = await this.registry.getByPhoneNumberId(message.phoneNumberId);
+      if (!account) {
+        logger.warn('[WhatsApp] No hay integración Meta para este Phone Number ID', {
+          phoneNumberId: message.phoneNumberId,
         });
         return;
       }
 
-      await this.handleIncomingMessage.execute({
-        fromPhoneNumber,
-        ...(message.profileName !== undefined && { profileName: message.profileName }),
-        externalMessageId: message.externalMessageId,
-        content: message.text,
-        timestamp: message.timestampMs,
-        contentType: this.toDomainContentType(message.contentType),
-        ...(message.mediaId !== undefined && { mediaId: message.mediaId }),
-        ...(message.mimeType !== undefined && { mimeType: message.mimeType }),
-        ...(message.fileName !== undefined && { fileName: message.fileName }),
-        ...(message.caption !== undefined && { caption: message.caption }),
-        ...(message.latitude !== undefined && { latitude: message.latitude }),
-        ...(message.longitude !== undefined && { longitude: message.longitude }),
-        ...(message.locationName !== undefined && { locationName: message.locationName }),
-        ...(message.locationAddress !== undefined && { locationAddress: message.locationAddress }),
-        ...(message.interactiveReplyId !== undefined && { interactiveReplyId: message.interactiveReplyId }),
-      });
-
-      logger.info('[WhatsApp] Message processed', {
-        waId: message.waId,
-        profileName: message.profileName,
-        messageId: message.externalMessageId,
-        contentType: message.contentType,
-      });
+      await runWithWhatsAppAccount(account, () => this.processInbound(message));
     } catch (err) {
       logger.error('[WhatsApp] Error processing inbound message', {
         waId: message.waId,
@@ -144,6 +132,44 @@ export class WhatsAppController {
         ...formatMetaApiError(err),
       });
     }
+  }
+
+  private async processInbound(message: ParsedWhatsAppInboundMessage): Promise<void> {
+    const fromPhoneNumber = this.toE164(message.waId);
+
+    if (!PhoneNumber.isPeruvian(fromPhoneNumber)) {
+      logger.info('[WhatsApp] Ignoring message from non-Peruvian number', {
+        waId: message.waId,
+        fromPhoneNumber,
+        messageId: message.externalMessageId,
+      });
+      return;
+    }
+
+    await this.handleIncomingMessage.execute({
+      fromPhoneNumber,
+      ...(message.profileName !== undefined && { profileName: message.profileName }),
+      externalMessageId: message.externalMessageId,
+      content: message.text,
+      timestamp: message.timestampMs,
+      contentType: this.toDomainContentType(message.contentType),
+      ...(message.mediaId !== undefined && { mediaId: message.mediaId }),
+      ...(message.mimeType !== undefined && { mimeType: message.mimeType }),
+      ...(message.fileName !== undefined && { fileName: message.fileName }),
+      ...(message.caption !== undefined && { caption: message.caption }),
+      ...(message.latitude !== undefined && { latitude: message.latitude }),
+      ...(message.longitude !== undefined && { longitude: message.longitude }),
+      ...(message.locationName !== undefined && { locationName: message.locationName }),
+      ...(message.locationAddress !== undefined && { locationAddress: message.locationAddress }),
+      ...(message.interactiveReplyId !== undefined && { interactiveReplyId: message.interactiveReplyId }),
+    });
+
+    logger.info('[WhatsApp] Message processed', {
+      waId: message.waId,
+      profileName: message.profileName,
+      messageId: message.externalMessageId,
+      contentType: message.contentType,
+    });
   }
 
   private toE164(waId: string | undefined): string {

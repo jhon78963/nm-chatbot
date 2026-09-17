@@ -46,9 +46,18 @@ export class ConversationPrismaRepository implements ConversationRepository {
     return this.toDomain(doc, messages);
   }
 
-  async findActiveByPhoneNumber(phoneNumber: string): Promise<Conversation | null> {
+  async findActiveByPhoneNumber(
+    phoneNumber: string,
+    tenantId?: string,
+    isPlatformTenant = false,
+  ): Promise<Conversation | null> {
+    const tenantClause = tenantWhere(tenantId, isPlatformTenant);
     const doc = await this.prisma.chatConversation.findFirst({
-      where: { phoneNumber, status: 'active' },
+      where: {
+        phoneNumber,
+        status: 'active',
+        ...(tenantClause ? tenantClause : {}),
+      },
     });
     if (!doc) return null;
     const messages = await this.loadMessages(doc.id);
@@ -310,6 +319,8 @@ export class ConversationPrismaRepository implements ConversationRepository {
     if (metaData) {
       meta['filterType'] = metaData.filterType;
       meta['filterValue'] = metaData.filterValue;
+      if (metaData.tenantId) meta['tenantId'] = metaData.tenantId;
+      if (metaData.phoneNumberId) meta['phoneNumberId'] = metaData.phoneNumberId;
     }
     if (careerId) {
       meta['careerId'] = careerId;
@@ -356,6 +367,11 @@ export class ConversationPrismaRepository implements ConversationRepository {
       clauses.push({
         labels: { has: filters.label },
       });
+    }
+
+    const tenantClause = tenantWhere(filters.tenantId, filters.isPlatformTenant === true);
+    if (tenantClause) {
+      clauses.push(tenantClause);
     }
 
     return clauses.length === 1 ? baseWithArchived : { AND: clauses };
@@ -422,10 +438,17 @@ export class ConversationPrismaRepository implements ConversationRepository {
       rawMeta && typeof rawMeta['careerId'] === 'string' ? rawMeta['careerId'] : null;
 
     let metaData: ConversationMetaData | null = null;
-    if (rawMeta && ('filterType' in rawMeta || 'filterValue' in rawMeta)) {
+    if (
+      rawMeta &&
+      ('filterType' in rawMeta || 'filterValue' in rawMeta || 'tenantId' in rawMeta || 'phoneNumberId' in rawMeta)
+    ) {
       metaData = {
         filterType: (rawMeta['filterType'] as string | null) ?? null,
         filterValue: rawMeta['filterValue'] as string | string[],
+        ...(typeof rawMeta['tenantId'] === 'string' ? { tenantId: rawMeta['tenantId'] } : {}),
+        ...(typeof rawMeta['phoneNumberId'] === 'string'
+          ? { phoneNumberId: rawMeta['phoneNumberId'] }
+          : {}),
       };
     }
 
@@ -457,4 +480,21 @@ export class ConversationPrismaRepository implements ConversationRepository {
       updatedAt: doc.updatedAt,
     });
   }
+}
+
+function tenantWhere(
+  tenantId?: string,
+  isPlatformTenant = false,
+): Prisma.ChatConversationWhereInput | undefined {
+  if (!tenantId) return undefined;
+  const match = { metaData: { path: ['tenantId'], equals: tenantId } };
+  if (!isPlatformTenant) return match;
+  return {
+    OR: [
+      match,
+      { metaData: { path: ['tenantId'], equals: Prisma.JsonNull } },
+      { metaData: { equals: Prisma.JsonNull } },
+      { metaData: { equals: Prisma.DbNull } },
+    ],
+  };
 }

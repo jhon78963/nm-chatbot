@@ -86,6 +86,9 @@ export class TakeConversationUseCase {
       conversationMode: savedConversation.mode,
       assignedAgentId: savedConversation.assignedAgentId,
       message: assistantMessage,
+      ...(savedConversation.metaData?.tenantId
+        ? { tenantId: savedConversation.metaData.tenantId }
+        : {}),
     });
 
     const funnelUser = await this.funnelUserRepo.findBySenderId(conversation.phoneNumber);

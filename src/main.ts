@@ -8,11 +8,15 @@ import { UserPrismaRepository } from './infrastructure/database/prisma/repositor
 import { NoOpFunnelMessageRepository } from './infrastructure/database/noop-funnel-message.repository.js';
 import { DeepSeekAdapter } from './infrastructure/ai/deepseek/deepseek.adapter.js';
 import { loadDeepSeekConfig } from './infrastructure/ai/deepseek/deepseek.config.js';
-import { MetaWhatsAppAdapter } from './infrastructure/webhooks/meta/meta-whatsapp.adapter.js';
-import { MetaMediaService } from './infrastructure/webhooks/meta/meta-media.service.js';
-import { LocalMediaStorage } from './infrastructure/storage/local-media.storage.js';
 import { WhatsAppController } from './infrastructure/webhooks/meta/whatsapp.controller.js';
 import { WhatsAppParserService } from './infrastructure/webhooks/meta/whatsapp-parser.service.js';
+import {
+  RoutingMetaMediaService,
+  RoutingMetaWhatsAppAdapter,
+  TenantWhatsAppRegistry,
+  type WhatsAppAccount,
+} from './infrastructure/whatsapp/tenant-whatsapp-registry.js';
+import { LocalMediaStorage } from './infrastructure/storage/local-media.storage.js';
 import { HandleIncomingMessageUseCase } from './application/use-cases/handle-incoming-message/handle-incoming-message.usecase.js';
 import { HandleMessageStatusUseCase } from './application/use-cases/handle-message-status/handle-message-status.usecase.js';
 import { SystemPromptBuilderService } from './application/services/system-prompt-builder.service.js';
@@ -85,21 +89,42 @@ async function bootstrap(): Promise<void> {
 
   const promptBuilder = new SystemPromptBuilderService();
 
-  // ── Messaging provider + Media ────────────────────────────────────────────
-  const metaMediaConfig = {
-    token: process.env['META_WHATSAPP_TOKEN'] ?? '',
-    phoneNumberId: process.env['META_WHATSAPP_PHONE_NUMBER_ID'] ?? '',
-    apiVersion: process.env['META_API_VERSION'] ?? 'v20.0',
-    baseUrl: process.env['META_API_BASE_URL'] ?? 'https://graph.facebook.com',
-  };
-  const metaMediaService = new MetaMediaService(metaMediaConfig);
+  // ── Messaging provider + Media (env = Maritex; el resto sale de Integraciones) ──
+  const envToken = process.env['META_WHATSAPP_TOKEN']?.trim() ?? '';
+  const envPhoneNumberId = process.env['META_WHATSAPP_PHONE_NUMBER_ID']?.trim() ?? '';
+  const platformTenantId =
+    process.env['CHATBOT_TENANT_ID']?.trim() ||
+    process.env['ECOMMERCE_TENANT_ID']?.trim() ||
+    'b14b2a6d-ff01-57e4-9004-7ece99dc46d9';
+  const envAccount: WhatsAppAccount | null =
+    envToken && envPhoneNumberId
+      ? {
+          tenantId: platformTenantId,
+          isPlatform: true,
+          botName: process.env['CHATBOT_BOT_NAME']?.trim() || 'Malu',
+          token: envToken,
+          phoneNumberId: envPhoneNumberId,
+          ...(process.env['META_WEBHOOK_VERIFY_TOKEN']?.trim()
+            ? { verifyToken: process.env['META_WEBHOOK_VERIFY_TOKEN'].trim() }
+            : {}),
+          ...(process.env['WEBHOOK_SECRET']?.trim()
+            ? { appSecret: process.env['WEBHOOK_SECRET'].trim() }
+            : {}),
+          ...(process.env['META_WHATSAPP_DISPLAY_PHONE']?.trim()
+            ? { displayPhone: process.env['META_WHATSAPP_DISPLAY_PHONE'].trim() }
+            : {}),
+        }
+      : null;
+  const whatsAppRegistry = new TenantWhatsAppRegistry(envAccount);
+  const metaMediaService = new RoutingMetaMediaService(whatsAppRegistry);
   const localMediaStorage = new LocalMediaStorage(
     process.env['MEDIA_STORAGE_PATH'] ?? '/app/uploads',
   );
-  const metaAdapter = new MetaWhatsAppAdapter(metaMediaConfig, metaMediaService);
+  const metaAdapter = new RoutingMetaWhatsAppAdapter(whatsAppRegistry);
 
   logger.info('[Bootstrap] Media storage initialized', {
     path: process.env['MEDIA_STORAGE_PATH'] ?? '/app/uploads',
+    platformWhatsApp: Boolean(envAccount),
   });
 
   // ── Realtime ──────────────────────────────────────────────────────────────
@@ -145,10 +170,10 @@ async function bootstrap(): Promise<void> {
     whatsAppParser,
     handleIncomingMessage,
     handleMessageStatus,
-    process.env['META_WEBHOOK_VERIFY_TOKEN'] ?? '',
+    whatsAppRegistry,
   );
 
-  const webhookRouter = createWebhookRouter(whatsAppController);
+  const webhookRouter = createWebhookRouter(whatsAppController, whatsAppRegistry);
   const authRouter = createAuthRouter(agentRepo);
   const agentInboxRouter = createAgentInboxRouter(
     conversationRepo,
@@ -161,6 +186,7 @@ async function bootstrap(): Promise<void> {
     localMediaStorage,
     realtimeNotifier,
     messageRepo,
+    whatsAppRegistry,
   );
   const quickRepliesRouter = createQuickRepliesRouter(quickReplyRepo);
   const chatRouter = createChatRouter(chatController);

@@ -10,6 +10,8 @@ export interface InboxQueryFilters {
   label?: string;
   /** C15 — include archived conversations (admin only) */
   includeArchived?: boolean;
+  tenantId?: string;
+  isPlatformTenant?: boolean;
 }
 
 export type InboxListFilter = 'unread' | 'unanswered';
@@ -20,13 +22,16 @@ export function buildInboxQueryFilters(input: {
   searchPhoneNumbers?: string[];
   label?: string;
   includeArchived?: boolean;
+  tenantId?: string;
+  isPlatformTenant?: boolean;
 }): InboxQueryFilters | undefined {
   const hasListFilter = input.listFilter !== undefined;
   const hasSearch = Boolean(input.q?.trim()) || Boolean(input.searchPhoneNumbers?.length);
   const hasLabel = Boolean(input.label?.trim());
   const hasArchived = input.includeArchived === true;
+  const hasTenant = Boolean(input.tenantId?.trim());
 
-  if (!hasListFilter && !hasSearch && !hasLabel && !hasArchived) {
+  if (!hasListFilter && !hasSearch && !hasLabel && !hasArchived && !hasTenant) {
     return undefined;
   }
 
@@ -37,5 +42,6 @@ export function buildInboxQueryFilters(input: {
     ...(input.searchPhoneNumbers?.length && { searchPhoneNumbers: input.searchPhoneNumbers }),
     ...(hasLabel && { label: input.label!.trim().toLowerCase() }),
     ...(hasArchived && { includeArchived: true }),
+    ...(hasTenant && { tenantId: input.tenantId!.trim(), isPlatformTenant: input.isPlatformTenant === true }),
   };
 }

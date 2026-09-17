@@ -12,6 +12,8 @@ import {
   ForbiddenError,
 } from '../../services/conversation-access.service.js';
 
+type MetaMediaPort = Pick<MetaMediaService, 'downloadMedia' | 'uploadMedia'>;
+
 export { ForbiddenError };
 
 export interface SendAgentMessageInput {
@@ -38,7 +40,7 @@ export class SendAgentMessageUseCase {
     private readonly conversationRepo: ConversationRepository,
     private readonly messagingProvider: MessagingProviderPort,
     private readonly funnelMessageRepo: FunnelMessageMongoRepository,
-    private readonly metaMediaService: MetaMediaService,
+    private readonly metaMediaService: MetaMediaPort,
     private readonly mediaStorage: MediaStoragePort,
     private readonly realtimeNotifier?: RealtimeNotifier,
   ) {}
@@ -155,6 +157,7 @@ export class SendAgentMessageUseCase {
       conversationMode: conversation.mode,
       assignedAgentId: conversation.assignedAgentId,
       message: agentMsg,
+      ...(conversation.metaData?.tenantId ? { tenantId: conversation.metaData.tenantId } : {}),
     });
 
     await this.funnelMessageRepo.saveAgentMessage({
