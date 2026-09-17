@@ -52,6 +52,16 @@ export class SsoErpLoginUseCase {
       throw new UnauthorizedError('No tienes acceso al panel de chatbot');
     }
 
+    const platformTenantId =
+      process.env['CHATBOT_TENANT_ID']?.trim() ||
+      process.env['ECOMMERCE_TENANT_ID']?.trim() ||
+      'b14b2a6d-ff01-57e4-9004-7ece99dc46d9';
+    if (payload.tenantId && payload.tenantId !== platformTenantId) {
+      throw new UnauthorizedError(
+        'El chatbot Malu es exclusivo de Novedades Maritex. Este cliente no tiene acceso.',
+      );
+    }
+
     const username = payload.username?.toLowerCase().trim();
     if (!username) {
       throw new UnauthorizedError('Token ERP inválido');
