@@ -1,5 +1,7 @@
-import mongoose from 'mongoose';
 import { logger } from '../../shared/logger.js';
+import { assertMongoPathEnabled } from './mongo-path.js';
+
+export { assertMongoPathEnabled, isChatbotMongoPathEnabled } from './mongo-path.js';
 
 export interface MongoConfig {
   uri: string;
@@ -10,8 +12,16 @@ export interface MongoConfig {
 
 /**
  * Connects to MongoDB (local or Atlas).
+ * Requiere CHATBOT_MONGO_ENABLED=true — no hay fallback a chatbot_uprit.
  */
 export async function connectMongoDB(config: MongoConfig): Promise<void> {
+  assertMongoPathEnabled();
+
+  if (!config.uri?.trim() || !config.dbName?.trim()) {
+    throw new Error('MONGODB_URI y MONGODB_DB_NAME son obligatorios cuando CHATBOT_MONGO_ENABLED=true');
+  }
+
+  const mongoose = (await import('mongoose')).default;
   const isAtlas = config.uri.startsWith('mongodb+srv://');
 
   mongoose.connection.on('connected', () =>
@@ -36,6 +46,7 @@ export async function connectMongoDB(config: MongoConfig): Promise<void> {
 }
 
 export async function disconnectMongoDB(): Promise<void> {
+  const mongoose = (await import('mongoose')).default;
   await mongoose.disconnect();
   logger.info('[MongoDB] Connection closed successfully');
 }

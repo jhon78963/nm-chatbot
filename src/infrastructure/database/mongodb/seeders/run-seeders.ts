@@ -1,6 +1,6 @@
 /**
- * Base data initialization script.
- * Run: node --env-file=.env dist/infrastructure/database/mongodb/seeders/run-seeders.js
+ * Base data initialization script (path legado UPRIT).
+ * NM producción no usa Mongo: requiere CHATBOT_MONGO_ENABLED=true y MONGODB_URI.
  */
 import { connectMongoDB, disconnectMongoDB } from '../connection.js';
 import { FunnelIntentionMongoRepository } from '../repositories/funnel-intention.mongo-repository.js';
@@ -8,11 +8,14 @@ import { seedFunnelIntentions } from './funnel-intentions.seeder.js';
 import { logger } from '../../../shared/logger.js';
 
 async function runSeeders(): Promise<void> {
-  logger.info('[Seeder] Starting seeders...');
+  const uri = process.env['MONGODB_URI']?.trim();
+  const dbName = process.env['MONGODB_DB_NAME']?.trim();
+
+  logger.info('[Seeder] Starting Mongo seeders (opt-in UPRIT path)...');
 
   await connectMongoDB({
-    uri: process.env['MONGODB_URI'] ?? 'mongodb://localhost:27017/chatbot_uprit',
-    dbName: process.env['MONGODB_DB_NAME'] ?? 'chatbot_uprit',
+    uri: uri ?? '',
+    dbName: dbName ?? '',
   });
 
   const funnelIntentionRepo = new FunnelIntentionMongoRepository();

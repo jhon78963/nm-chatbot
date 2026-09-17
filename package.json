@@ -53,6 +53,8 @@
     "reset:password": "node --env-file=.env deploy/reset-agent-password.mjs",
     "sync:products": "node --env-file=.env deploy/sync-products-to-context.mjs",
     "test:slug": "node --test deploy/product-slug.test.mjs",
+    "test:contract": "node --test scripts/check-erp-catalog-contract.mjs",
+    "test:guards": "node --experimental-strip-types --test src/infrastructure/ai/experience-timeout.test.ts src/infrastructure/database/mongodb/mongo-path.test.ts",
     "test:pdp": "npm run build && node --test deploy/ecommerce-pdp-purchase.test.mjs",
     "test:b2b": "npm run build && node --test deploy/ecommerce-b2b-quote.test.mjs",
     "test:handoff": "npm run build && node --test deploy/whatsapp-cart-handoff.test.mjs",

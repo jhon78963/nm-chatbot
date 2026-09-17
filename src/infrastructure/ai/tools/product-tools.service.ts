@@ -126,7 +126,7 @@ export class ProductToolsService {
           where: { isDeleted: false },
           include: {
             size: { select: { description: true } },
-            inventoryBalances: { select: { quantity: true } },
+            inventoryBalances: { select: { quantity: true, reservedQuantity: true } },
           },
         },
         media: {
@@ -142,7 +142,8 @@ export class ProductToolsService {
   private mapSizes(product: ProductCatalogRow) {
     return product.productSizes.map((ps) => {
       const stock = ps.inventoryBalances.reduce(
-        (sum: number, b: { quantity: number }) => sum + b.quantity,
+        (sum: number, b: { quantity: number; reservedQuantity?: number | null }) =>
+          sum + Math.max(0, b.quantity - (b.reservedQuantity ?? 0)),
         0,
       );
       return {

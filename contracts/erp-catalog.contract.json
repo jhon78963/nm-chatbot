@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "description": "Campos del schema ERP que nm-chatbot lee (catalog.schema.prisma). Debe coincidir con nm-backend/libs/database/prisma/chatbot-catalog.contract.json.",
+  "models": {
+    "Gender": {
+      "table": "genders",
+      "fields": {
+        "id": "String",
+        "name": "String"
+      }
+    },
+    "Product": {
+      "table": "products",
+      "fields": {
+        "id": "String",
+        "name": "String",
+        "description": "String?",
+        "shortDescription": "String?",
+        "barcode": "String?",
+        "percentageDiscount": "String?",
+        "isFeatured": "Boolean",
+        "isOnSale": "Boolean",
+        "isNew": "Boolean",
+        "status": "String",
+        "genderId": "String",
+        "warehouseId": "String",
+        "isDeleted": "Boolean",
+        "createdAt": "DateTime",
+        "updatedAt": "DateTime"
+      }
+    },
+    "ProductMedia": {
+      "table": "product_media",
+      "fields": {
+        "id": "String",
+        "productId": "String",
+        "url": "String",
+        "sortOrder": "Int",
+        "isCover": "Boolean",
+        "createdAt": "DateTime"
+      }
+    },
+    "Size": {
+      "table": "sizes",
+      "fields": {
+        "id": "String",
+        "description": "String",
+        "isDeleted": "Boolean"
+      }
+    },
+    "Color": {
+      "table": "colors",
+      "fields": {
+        "id": "String",
+        "description": "String"
+      }
+    },
+    "ProductSize": {
+      "table": "product_size",
+      "fields": {
+        "id": "String",
+        "productId": "String",
+        "sizeId": "String",
+        "barcode": "String?",
+        "salePrice": "Decimal",
+        "isDeleted": "Boolean"
+      },
+      "uniques": [["productId", "sizeId"]]
+    },
+    "ProductSizeColor": {
+      "table": "product_size_color",
+      "fields": {
+        "id": "String",
+        "productSizeId": "String",
+        "colorId": "String"
+      },
+      "uniques": [["productSizeId", "colorId"]]
+    },
+    "InventoryBalance": {
+      "table": "inventory_balances",
+      "fields": {
+        "id": "String",
+        "warehouseId": "String",
+        "productSizeId": "String",
+        "colorId": "String",
+        "quantity": "Int",
+        "reservedQuantity": "Int"
+      },
+      "uniques": [["warehouseId", "productSizeId", "colorId"]]
+    },
+    "User": {
+      "table": "users",
+      "fields": {
+        "id": "String",
+        "username": "String",
+        "email": "String",
+        "name": "String",
+        "surname": "String",
+        "phone": "String?",
+        "isEnabled": "Boolean",
+        "isDeleted": "Boolean",
+        "tenantId": "String",
+        "warehouseId": "String?",
+        "createdAt": "DateTime",
+        "updatedAt": "DateTime"
+      }
+    },
+    "Role": {
+      "table": "roles",
+      "fields": {
+        "id": "String",
+        "name": "String",
+        "guardName": "String",
+        "tenantId": "String?"
+      },
+      "uniques": [["name", "tenantId"]]
+    },
+    "UserRole": {
+      "table": "user_roles",
+      "fields": {
+        "userId": "String",
+        "roleId": "String"
+      }
+    }
+  }
+}

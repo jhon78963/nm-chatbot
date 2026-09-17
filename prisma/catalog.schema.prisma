@@ -120,7 +120,8 @@ model InventoryBalance {
   warehouseId   String @map("warehouse_id")
   productSizeId String @map("product_size_id")
   colorId       String @map("color_id")
-  quantity      Int    @default(0)
+  quantity           Int @default(0)
+  reservedQuantity   Int @default(0) @map("reserved_quantity")
 
   productSize ProductSize @relation(fields: [productSizeId], references: [id])
 

@@ -8,6 +8,7 @@ import type {
 } from '../../../application/ports/ai-provider.port.js';
 import type { DeepSeekConfig } from './deepseek.config.js';
 import { logger } from '../../shared/logger.js';
+import { withExperienceTimeout } from '../experience-timeout.js';
 
 interface DeepSeekResponseChoice {
   message: { role: string; content: string | null; tool_calls?: ToolCall[] };
@@ -74,27 +75,53 @@ export class DeepSeekAdapter implements AiProviderPort {
       toolsEnabled: hasTools,
     });
 
-    const response = await this.client.post<DeepSeekApiResponse>('/chat/completions', body);
+    const fallback: AiCompletionResult = {
+      content: this.config.timeoutFallbackMessage,
+      model: 'timeout-fallback',
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      finishReason: 'timeout',
+    };
 
-    const choice = response.data.choices[0];
-    if (!choice) {
-      throw new Error('[DeepSeek] API returned no response choices');
+    const settled = await withExperienceTimeout(
+      async (signal) => {
+        const response = await this.client.post<DeepSeekApiResponse>('/chat/completions', body, {
+          signal,
+        });
+
+        const choice = response.data.choices[0];
+        if (!choice) {
+          throw new Error('[DeepSeek] API returned no response choices');
+        }
+
+        logger.debug('[DeepSeek] Response received', {
+          tokens: response.data.usage.total_tokens,
+          finishReason: choice.finish_reason,
+          toolCalls: choice.message.tool_calls?.length ?? 0,
+        });
+
+        return {
+          content: choice.message.content ?? '',
+          model: response.data.model,
+          promptTokens: response.data.usage.prompt_tokens,
+          completionTokens: response.data.usage.completion_tokens,
+          totalTokens: response.data.usage.total_tokens,
+          finishReason: choice.finish_reason,
+          ...(choice.message.tool_calls && { toolCalls: choice.message.tool_calls }),
+        } satisfies AiCompletionResult;
+      },
+      this.config.experienceTimeoutMs,
+      fallback,
+    );
+
+    if (settled.timedOut) {
+      logger.warn('[DeepSeek] Experience timeout — sending fallback message', {
+        timeoutMs: this.config.experienceTimeoutMs,
+        model,
+      });
     }
 
-    logger.debug('[DeepSeek] Response received', {
-      tokens: response.data.usage.total_tokens,
-      finishReason: choice.finish_reason,
-      toolCalls: choice.message.tool_calls?.length ?? 0,
-    });
-
-    return {
-      content: choice.message.content ?? '',
-      model: response.data.model,
-      promptTokens: response.data.usage.prompt_tokens,
-      completionTokens: response.data.usage.completion_tokens,
-      totalTokens: response.data.usage.total_tokens,
-      finishReason: choice.finish_reason,
-      ...(choice.message.tool_calls && { toolCalls: choice.message.tool_calls }),
-    };
+    return settled.value;
   }
 }

@@ -44,6 +44,12 @@ async function bootstrap(): Promise<void> {
   await connectPrisma();
   await connectCatalogPrisma();
 
+  if (process.env['CHATBOT_MONGO_ENABLED'] === 'true') {
+    logger.warn('[Bootstrap] CHATBOT_MONGO_ENABLED=true — path Mongo/UPRIT opt-in (no es el modo NM)');
+  } else {
+    logger.info('[Bootstrap] Path Mongo/UPRIT aislado (CHATBOT_MONGO_ENABLED != true)');
+  }
+
   const jwtSecret = process.env['JWT_SECRET'];
   if (!jwtSecret) throw new Error('JWT_SECRET environment variable is required');
 

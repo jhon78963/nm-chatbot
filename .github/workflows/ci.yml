@@ -41,6 +41,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Catalog contract + isolated-path tests
+        run: npm run test:contract && npm run test:guards
+
       - name: Build
         run: npm run build
 
