@@ -13,6 +13,7 @@ import { useChatMessages } from '../hooks/useChatMessages'
 import { useTypingEmitter, useTypingIndicator } from '../hooks/useTypingIndicator'
 import { useMessageNotifications } from '../hooks/useMessageNotifications'
 import { api } from '../api/client'
+import { getBotName, getBranding, loadChatbotBranding } from '../branding'
 import MessageBubble from '../components/MessageBubble'
 import ConnectionBanner, { ConnectionStatus } from '../components/ConnectionBanner'
 import TypingIndicator from '../components/TypingIndicator'
@@ -618,7 +619,7 @@ function ChatPanel({
   }
 
   async function handleReturnToBot() {
-    if (!confirm('¿Devolver este chat al bot? Malu retomará la atención.')) return
+    if (!confirm(`¿Devolver este chat al bot? ${getBotName()} retomará la atención.`)) return
     try { await api.post(`/api/v1/conversations/${id}/return-to-bot`, {}); onBack() }
     catch (err) { alert(err instanceof Error ? err.message : 'Error') }
   }
@@ -928,6 +929,12 @@ export default function DashboardPage() {
   const [includeArchived, setIncludeArchived] = useState(false)
   const [adminFilter, setAdminFilter] = useState<AdminInboxFilter>('all')
 
+  const [branding, setBranding] = useState(getBranding())
+
+  useEffect(() => {
+    void loadChatbotBranding().then(() => setBranding(getBranding()))
+  }, [])
+
   // ── Theme (light/dark) ─────────────────────────────────────────────────
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     try { return (localStorage.getItem('dash-theme') as 'light' | 'dark') ?? 'light' }
@@ -985,15 +992,19 @@ export default function DashboardPage() {
           <div className="dash-sidebar-header-row">
             <div className="dash-sidebar-title-block">
               <div className="dash-sidebar-title">
-                <span className="dash-sidebar-icon">
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-                    <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
-                  </svg>
-                </span>
+                {branding.logoUrl ? (
+                  <img src={branding.logoUrl} alt="" className="dash-sidebar-logo" />
+                ) : (
+                  <span className="dash-sidebar-icon">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                      <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+                    </svg>
+                  </span>
+                )}
                 Chats
                 {displayTotal > 0 && <span className="dash-badge dash-badge--header">{displayTotal}</span>}
               </div>
-              <span className="dash-sidebar-subtitle">WhatsApp Business</span>
+              <span className="dash-sidebar-subtitle">{branding.botName}</span>
             </div>
             <div className="dash-sidebar-actions">
               <SoundToggle />

@@ -5,6 +5,7 @@ const MAX_MESSAGES_PER_SESSION = 40;
 const SESSION_TTL_MS = 30 * 60 * 1000;
 
 interface Session {
+  tenantId: string;
   messages: ChatMessage[];
   updatedAt: number;
 }
@@ -17,16 +18,18 @@ interface Session {
 export class ChatSessionStore {
   private readonly sessions = new Map<string, Session>();
 
-  createSession(): string {
+  createSession(tenantId = 'legacy'): string {
     const id = randomUUID();
-    this.sessions.set(id, { messages: [], updatedAt: Date.now() });
+    this.sessions.set(id, { tenantId, messages: [], updatedAt: Date.now() });
     return id;
   }
 
-  getHistory(sessionId: string): ChatMessage[] | null {
+  getHistory(sessionId: string, tenantId?: string): ChatMessage[] | null {
     this.evictExpired();
     const session = this.sessions.get(sessionId);
-    return session ? session.messages : null;
+    if (!session) return null;
+    if (tenantId && session.tenantId !== tenantId) return null;
+    return session.messages;
   }
 
   appendMessage(sessionId: string, message: ChatMessage): void {

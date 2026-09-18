@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import logoLight from '../assets/logo-maritex-light.svg'
-import logoDark from '../assets/logo-maritex-dark.svg'
+import { getBranding, loadPublicChatbotBranding } from '../branding'
 
 const HERO_IMAGE =
   'https://images.pexels.com/photos/267885/pexels-photo-267885.jpeg?auto=compress&cs=tinysrgb&w=1200'
@@ -27,6 +26,12 @@ export default function LoginPage() {
       try { localStorage.setItem('dash-theme', next) } catch {}
       return next
     })
+  }, [])
+
+  const [branding, setBranding] = useState(getBranding())
+
+  useEffect(() => {
+    void loadPublicChatbotBranding().then(() => setBranding(getBranding()))
   }, [])
 
   useEffect(() => {
@@ -95,15 +100,21 @@ export default function LoginPage() {
           <div className="login-panel">
             <div className="login-header">
               <div className="login-brand">
-                <img
-                  src={theme === 'dark' ? logoDark : logoLight}
-                  alt="Novedades Maritex"
-                  className="login-brand-logo"
-                />
+                {branding.logoUrl ? (
+                  <img
+                    src={branding.logoUrl}
+                    alt={branding.botName}
+                    className="login-brand-logo"
+                  />
+                ) : (
+                  <span className="login-brand-logo login-brand-logo--text">
+                    {branding.botName.slice(0, 2).toUpperCase()}
+                  </span>
+                )}
               </div>
               <h1 className="login-title">Panel de agentes</h1>
               <p className="login-subtitle">
-                Novedades Maritex — WhatsApp Bot Malu
+                {branding.botName}
               </p>
             </div>
 

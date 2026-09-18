@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 import multer from 'multer';
 import { authenticateAgentJwt } from '../middlewares/authenticate-agent-jwt.middleware.js';
 import { ListAgentInboxUseCase } from '../../../application/use-cases/agent-inbox/list-agent-inbox.usecase.js';
@@ -14,7 +14,7 @@ import { ArchiveConversationUseCase } from '../../../application/use-cases/agent
 import { AddInternalNoteUseCase } from '../../../application/use-cases/agent-inbox/add-internal-note.usecase.js';
 import { ReassignConversationUseCase } from '../../../application/use-cases/agent-inbox/reassign-conversation.usecase.js';
 import { SendInteractiveMessageUseCase } from '../../../application/use-cases/agent-inbox/send-interactive-message.usecase.js';
-import { ForbiddenError } from '../../../application/services/conversation-access.service.js';
+import { ForbiddenError, assertConversationTenant } from '../../../application/services/conversation-access.service.js';
 import type { ConversationRepository } from '../../../domain/repositories/conversation.repository.js';
 import type { MessagingProviderPort } from '../../../application/ports/messaging-provider.port.js';
 import type { FunnelMessageMongoRepository } from '../../database/mongodb/repositories/funnel-message.mongo-repository.js';
@@ -50,8 +50,10 @@ function platformTenantId(): string {
 
 function tenantScopeFromRequest(req: Request): { tenantId?: string; isPlatformTenant?: boolean } {
   const platformId = platformTenantId();
-  const tenantId = req.agent?.tenantId?.trim() || platformId || undefined;
-  if (!tenantId) return {};
+  const tenantId = req.agent?.tenantId?.trim();
+  if (!tenantId) {
+    return { tenantId: 'unscoped', isPlatformTenant: false };
+  }
   return {
     tenantId,
     isPlatformTenant: Boolean(platformId && tenantId === platformId),
@@ -133,15 +135,38 @@ export function createAgentInboxRouter(
 
   router.use('/api/v1', authenticateAgentJwt);
 
+  router.get('/api/v1/branding', async (req: Request, res: Response) => {
+    const scope = tenantScopeFromRequest(req);
+    const account = scope.tenantId && scope.tenantId !== 'unscoped'
+      ? await registry?.getByTenantId(scope.tenantId)
+      : null;
+    const botName = account?.botName?.trim() || 'Asistente';
+    res.json({
+      botName,
+      primaryColor: account?.primaryColor ?? null,
+      logoUrl: account?.logoUrl ?? null,
+    });
+  });
+
   // GET /api/v1/agents — admin: list active agents for reassign modal
   router.get('/api/v1/agents', async (req: Request, res: Response) => {
     if (req.agent!.role !== 'admin') {
       res.status(403).json({ error: 'Solo administradores pueden listar agentes' });
       return;
     }
+    const scope = tenantScopeFromRequest(req);
     const agents = await agentRepo.findActive();
+    const suffix = scope.tenantId && scope.tenantId !== 'unscoped'
+      ? scope.tenantId.replace(/-/g, '').slice(0, 8).toLowerCase()
+      : '';
+    const scoped = scope.isPlatformTenant
+      ? agents
+      : agents.filter((a) =>
+          a.id === req.agent!.id
+          || (suffix && a.username?.toLowerCase().endsWith(`.${suffix}`)),
+        );
     res.json({
-      agents: agents.map((a) => ({
+      agents: scoped.map((a) => ({
         id: a.id,
         name: a.name,
         role: a.role,
@@ -200,13 +225,37 @@ export function createAgentInboxRouter(
     res.json(result);
   });
 
+  router.use('/api/v1/conversations/:id', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const conversation = await conversationRepo.findById(String(req.params['id']));
+      if (!conversation) {
+        res.status(404).json({ error: 'Conversación no encontrada' });
+        return;
+      }
+      assertConversationTenant(conversation, tenantScopeFromRequest(req));
+      next();
+    } catch (err) {
+      if (err instanceof ForbiddenError) {
+        res.status(403).json({ error: err.message });
+        return;
+      }
+      next(err);
+    }
+  });
+
   // GET /api/v1/conversations/:id
   router.get('/api/v1/conversations/:id', async (req: Request, res: Response) => {
     const agentId = req.agent!.id;
     const conversationId = String(req.params['id']);
 
     try {
-      const result = await getHistory.execute({ conversationId, agentId, role: req.agent!.role, limit: 0 });
+      const result = await getHistory.execute({
+        conversationId,
+        agentId,
+        role: req.agent!.role,
+        limit: 0,
+        ...tenantScopeFromRequest(req),
+      });
       res.json({ ...result, messages: undefined });
     } catch (err) {
       if (err instanceof ForbiddenError) {
@@ -242,6 +291,7 @@ export function createAgentInboxRouter(
         role: req.agent!.role,
         limit,
         ...(since !== undefined && !Number.isNaN(since.getTime()) && { since }),
+        ...tenantScopeFromRequest(req),
       });
       res.json(result);
     } catch (err) {

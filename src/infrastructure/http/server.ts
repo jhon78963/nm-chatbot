@@ -14,6 +14,7 @@ export interface ServerOptions {
   corsOrigins: string[];
   /** Absolute path to local media uploads directory (MEDIA_STORAGE_PATH) */
   mediaStoragePath?: string;
+  isAllowedOrigin?: (origin: string) => boolean | Promise<boolean>;
 }
 
 export interface AppServer {
@@ -40,15 +41,19 @@ export function createServer(
   );
   app.use(express.urlencoded({ extended: true }));
 
-  app.use((_req: Request, res: Response, next: NextFunction) => {
+  app.use(async (_req: Request, res: Response, next: NextFunction) => {
     const origins = options.corsOrigins;
     const origin = _req.headers['origin'];
-    if (origin && origins.includes(origin)) {
+    const extraAllowed =
+      typeof origin === 'string' && origin
+        ? await options.isAllowedOrigin?.(origin)
+        : false;
+    if (origin && (origins.includes(origin) || extraAllowed)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Credentials', 'true');
     }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Store-Domain');
     if (_req.method === 'OPTIONS') {
       res.sendStatus(204);
       return;

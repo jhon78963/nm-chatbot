@@ -1,5 +1,6 @@
 import type { ChatMessage } from '../hooks/useChatMessages'
 import { resolveMediaUrl } from '../api/client'
+import { getBotName } from '../branding'
 import MessageStatusIcon from './MessageStatusIcon'
 
 interface Props {
@@ -7,7 +8,6 @@ interface Props {
 }
 
 const ROLE_LABEL: Partial<Record<ChatMessage['role'], string>> = {
-  assistant: 'Malu',
   system: 'Sistema',
 }
 
@@ -112,7 +112,7 @@ export default function MessageBubble({ message: m }: Props) {
     hour: '2-digit',
     minute: '2-digit',
   })
-  const senderLabel = ROLE_LABEL[m.role]
+  const senderLabel = m.role === 'assistant' ? getBotName() : ROLE_LABEL[m.role]
   const hasMedia = (
     m.contentType === 'image' ||
     m.contentType === 'document' ||

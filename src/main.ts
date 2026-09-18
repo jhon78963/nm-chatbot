@@ -37,6 +37,7 @@ import {
 import { ChatController } from './infrastructure/http/controllers/chat.controller.js';
 import { createChatRouter } from './infrastructure/http/routes/chat.routes.js';
 import { createServer } from './infrastructure/http/server.js';
+import { isPlatformSubdomainOrigin } from './infrastructure/http/platform-cors.js';
 import { WebSocketRealtimeAdapter } from './infrastructure/realtime/websocket-realtime.adapter.js';
 import { logger } from './infrastructure/shared/logger.js';
 
@@ -83,7 +84,6 @@ async function bootstrap(): Promise<void> {
   const knowledgeBase = loadKnowledgeBase(resolveKnowledgeBasePath());
   const hybridChatService = new HybridChatService(deepSeekAdapter, productToolsService, knowledgeBase);
   const chatSessionStore = new ChatSessionStore();
-  const chatController = new ChatController(hybridChatService, chatSessionStore);
   logger.info('[Bootstrap] Hybrid chat engine initialized', { knowledgeBaseChars: knowledgeBase.length });
 
   const messageDebounceMs = loadMessageDebounceMs();
@@ -125,6 +125,12 @@ async function bootstrap(): Promise<void> {
         }
       : null;
   const whatsAppRegistry = new TenantWhatsAppRegistry(envAccount);
+  const chatController = new ChatController(
+    hybridChatService,
+    chatSessionStore,
+    whatsAppRegistry,
+    knowledgeBase,
+  );
   const metaMediaService = new RoutingMetaMediaService(whatsAppRegistry);
   const localMediaStorage = new LocalMediaStorage(
     process.env['MEDIA_STORAGE_PATH'] ?? '/app/uploads',
@@ -210,6 +216,12 @@ async function bootstrap(): Promise<void> {
     port: Number(process.env['PORT'] ?? 3000),
     corsOrigins: [...new Set(corsOrigins)],
     mediaStoragePath: process.env['MEDIA_STORAGE_PATH'] ?? '/app/uploads',
+    isAllowedOrigin: async (origin) => {
+      if (isPlatformSubdomainOrigin(origin, process.env['PLATFORM_PUBLIC_DOMAIN'])) {
+        return true;
+      }
+      return whatsAppRegistry.getByHost(origin).then(Boolean);
+    },
   }, quickRepliesRouter, chatRouter);
 
   realtimeAdapter.start(httpServer);

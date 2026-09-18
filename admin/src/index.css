@@ -155,6 +155,17 @@ body { min-height: 100dvh; }
   height: 100%;
   object-fit: contain;
 }
+.login-brand-logo--text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: var(--clr-primary);
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
 .login-title {
   font-size: 1.5rem;
   font-weight: 700;
@@ -435,6 +446,13 @@ body { min-height: 100dvh; }
   padding-left: 1.625rem;
 }
 .dash-sidebar-icon { color: var(--dash-muted); display: flex; flex-shrink: 0; }
+.dash-sidebar-logo {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
 .dash-agent-name {
   font-size: .78rem;
   color: var(--dash-muted);

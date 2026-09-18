@@ -46,7 +46,7 @@ export class LoginAgentUseCase {
 
     await this.agentRepo.updateLastLogin(agent.id);
 
-    const token = signAgentToken(agent);
+    const token = signAgentToken(agent, undefined, platformTenantIdFromEnv());
 
     return {
       token,
@@ -66,4 +66,12 @@ export class UnauthorizedError extends Error {
     super(message);
     this.name = 'UnauthorizedError';
   }
+}
+
+function platformTenantIdFromEnv(): string | undefined {
+  return (
+    process.env['CHATBOT_TENANT_ID']?.trim() ||
+    process.env['ECOMMERCE_TENANT_ID']?.trim() ||
+    undefined
+  );
 }

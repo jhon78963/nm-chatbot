@@ -25,11 +25,42 @@ export function assertAgentOwnsConversation(
 }
 
 /** Admins can read any conversation; agents can preview bot-mode or unassigned human chats. */
+export type ConversationTenantScope = {
+  tenantId?: string | undefined;
+  isPlatformTenant?: boolean | undefined;
+};
+
+export function assertConversationTenant(
+  conversation: Conversation,
+  scope?: ConversationTenantScope,
+): void {
+  if (!scope) return;
+
+  const requiredTenant = scope.tenantId?.trim();
+  if (!requiredTenant || requiredTenant === 'unscoped') {
+    throw new ForbiddenError('Acceso denegado');
+  }
+
+  const conversationTenant = conversation.metaData?.tenantId?.trim();
+  if (!conversationTenant) {
+    if (!scope?.isPlatformTenant) {
+      throw new ForbiddenError('Acceso denegado');
+    }
+    return;
+  }
+
+  if (conversationTenant !== requiredTenant) {
+    throw new ForbiddenError('Acceso denegado');
+  }
+}
+
 export function assertCanViewConversation(
   conversation: Conversation,
   agentId: string,
   role: AgentRole = 'agent',
+  scope?: ConversationTenantScope,
 ): void {
+  assertConversationTenant(conversation, scope);
   if (role === 'admin') return;
   if (conversation.isBotMode()) return;
   if (conversation.isHumanMode() && conversation.assignedAgentId === null) return;

@@ -18,7 +18,11 @@ export class HybridChatService {
 
   async chat(
     history: ChatMessage[],
-    options?: { customerPhone?: string },
+    options?: {
+      customerPhone?: string;
+      systemPrompt?: string;
+      disableTools?: boolean;
+    },
   ): Promise<HybridChatResult> {
     if (options?.customerPhone) {
       this.toolsService.setCartContext(options.customerPhone);
@@ -26,9 +30,18 @@ export class HybridChatService {
 
     try {
       const messages: ChatMessage[] = [
-        { role: 'system', content: withCurrentDateContext(this.systemPrompt) },
+        { role: 'system', content: withCurrentDateContext(options?.systemPrompt ?? this.systemPrompt) },
         ...history,
       ];
+      if (options?.disableTools) {
+        const result = await this.aiProvider.complete(messages);
+        return {
+          content: result.content,
+          model: result.model,
+          totalTokens: result.totalTokens ?? 0,
+          toolCallsExecuted: [],
+        };
+      }
       return await completeWithTools(this.aiProvider, messages, PRODUCT_TOOLS, (name, args) =>
         this.toolsService.execute(name, args),
       );

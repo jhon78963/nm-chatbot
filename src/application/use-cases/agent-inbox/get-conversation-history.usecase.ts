@@ -17,6 +17,8 @@ export interface GetConversationHistoryInput {
   agentId: string;
   role?: AgentRole;
   limit?: number | undefined;
+  tenantId?: string;
+  isPlatformTenant?: boolean;
   /** Return only messages with timestamp strictly after this date (delta sync). */
   since?: Date;
 }
@@ -70,7 +72,10 @@ export class GetConversationHistoryUseCase {
       throw new Error('Conversación no encontrada');
     }
 
-    assertCanViewConversation(conversation, input.agentId, input.role ?? 'agent');
+    assertCanViewConversation(conversation, input.agentId, input.role ?? 'agent', {
+      tenantId: input.tenantId,
+      isPlatformTenant: input.isPlatformTenant,
+    });
 
     let msgs: ReadonlyArray<Message> =
       input.limit !== undefined && input.limit > 0

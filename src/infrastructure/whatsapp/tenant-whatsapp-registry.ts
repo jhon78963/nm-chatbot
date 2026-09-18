@@ -25,6 +25,10 @@ export interface WhatsAppAccount {
   welcomeMessage?: string;
   storeUrl?: string;
   knowledge?: string;
+  primaryColor?: string;
+  logoUrl?: string;
+  widgetEnabled?: boolean;
+  chatbotHost?: string;
 }
 
 interface TenantAccountPayload {
@@ -40,6 +44,10 @@ interface TenantAccountPayload {
   welcomeMessage?: string;
   storeUrl?: string;
   knowledge?: string;
+  primaryColor?: string;
+  logoUrl?: string;
+  widgetEnabled?: boolean;
+  chatbotHost?: string;
 }
 
 const accountAls = new AsyncLocalStorage<WhatsAppAccount>();
@@ -120,13 +128,44 @@ export class TenantWhatsAppRegistry {
     return this.mediaFor(account);
   }
 
+  async getByTenantId(tenantId?: string | null): Promise<WhatsAppAccount | null> {
+    const id = tenantId?.trim();
+    if (!id) return null;
+    const accounts = await this.refresh();
+    return accounts.find((item) => item.tenantId === id) ?? null;
+  }
+
   async getByPhoneNumberId(phoneNumberId?: string | null): Promise<WhatsAppAccount | null> {
     const id = phoneNumberId?.trim();
     const accounts = await this.refresh();
     if (id) {
-      return accounts.find((item) => item.phoneNumberId === id) ?? null;
+      return accounts.find((item) => item.phoneNumberId && item.phoneNumberId === id) ?? null;
     }
     return this.envAccount;
+  }
+
+  async getByHost(host?: string | null): Promise<WhatsAppAccount | null> {
+    const normalized = normalizeAccountHost(host);
+    if (!normalized) return null;
+    const accounts = await this.refresh();
+    return (
+      accounts.find((item) => {
+        return (
+          normalizeAccountHost(item.storeUrl) === normalized ||
+          normalizeAccountHost(item.chatbotHost) === normalized
+        );
+      }) ?? null
+    );
+  }
+
+  allowsOrigin(origin?: string | null): boolean {
+    const normalized = normalizeAccountHost(origin);
+    if (!normalized) return false;
+    return this.accounts.some(
+      (item) =>
+        normalizeAccountHost(item.storeUrl) === normalized ||
+        normalizeAccountHost(item.chatbotHost) === normalized,
+    );
   }
 
   async getByVerifyToken(token?: string | null): Promise<WhatsAppAccount | null> {
@@ -155,13 +194,13 @@ export class TenantWhatsAppRegistry {
 
     const remote = await this.fetchRemoteAccounts();
     const merged = new Map<string, WhatsAppAccount>();
-    if (this.envAccount?.phoneNumberId) {
-      merged.set(this.envAccount.phoneNumberId, this.envAccount);
+    const keyOf = (account: WhatsAppAccount) =>
+      account.phoneNumberId?.trim() || `tenant:${account.tenantId}`;
+    if (this.envAccount) {
+      merged.set(keyOf(this.envAccount), this.envAccount);
     }
     for (const account of remote) {
-      if (account.phoneNumberId && account.token) {
-        merged.set(account.phoneNumberId, account);
-      }
+      merged.set(keyOf(account), account);
     }
     this.accounts = Array.from(merged.values());
     this.loadedAt = Date.now();
@@ -194,13 +233,14 @@ export class TenantWhatsAppRegistry {
       const payload = (await response.json()) as TenantAccountPayload[];
       if (!Array.isArray(payload)) return [];
       return payload
-        .filter((row) => row.token && row.phoneNumberId && row.tenantId)
+        .filter((row) => row.tenantId)
         .map((row) => ({
           tenantId: String(row.tenantId),
           isPlatform: row.isPlatform === true,
           botName: row.botName?.trim() || 'Asistente',
-          token: String(row.token),
-          phoneNumberId: String(row.phoneNumberId),
+          token: String(row.token ?? ''),
+          phoneNumberId: String(row.phoneNumberId ?? ''),
+          widgetEnabled: row.widgetEnabled !== false,
           ...(row.wabaId ? { wabaId: row.wabaId } : {}),
           ...(row.verifyToken ? { verifyToken: row.verifyToken } : {}),
           ...(row.appSecret ? { appSecret: row.appSecret } : {}),
@@ -208,6 +248,9 @@ export class TenantWhatsAppRegistry {
           ...(row.welcomeMessage ? { welcomeMessage: row.welcomeMessage } : {}),
           ...(row.storeUrl ? { storeUrl: row.storeUrl } : {}),
           ...(row.knowledge ? { knowledge: row.knowledge } : {}),
+          ...(row.primaryColor ? { primaryColor: row.primaryColor } : {}),
+          ...(row.logoUrl ? { logoUrl: row.logoUrl } : {}),
+          ...(row.chatbotHost ? { chatbotHost: row.chatbotHost } : {}),
         }));
     } catch (error) {
       logger.warn('[WhatsAppRegistry] Error al leer cuentas por tenant', {
@@ -216,6 +259,18 @@ export class TenantWhatsAppRegistry {
       return [];
     }
   }
+}
+
+function normalizeAccountHost(raw?: string | null): string {
+  if (!raw) return '';
+  return raw
+    .split(',')[0]
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')
+    .replace(/:\d+$/, '')
+    .replace(/^www\./, '');
 }
 
 export class RoutingMetaWhatsAppAdapter implements MessagingProviderPort {
