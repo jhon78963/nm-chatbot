@@ -44,7 +44,7 @@ export function authenticateAgentJwt(req: Request, res: Response, next: NextFunc
       username: payload.username,
       name: payload.name,
       role: payload.role ?? 'agent',
-      tenantId: payload.tenantId,
+      ...(payload.tenantId ? { tenantId: payload.tenantId } : {}),
     };
     next();
   } catch {

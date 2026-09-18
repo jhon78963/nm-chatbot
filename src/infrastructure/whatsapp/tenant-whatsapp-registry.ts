@@ -263,8 +263,9 @@ export class TenantWhatsAppRegistry {
 
 function normalizeAccountHost(raw?: string | null): string {
   if (!raw) return '';
-  return raw
-    .split(',')[0]
+  const host = raw.split(',')[0];
+  if (!host) return '';
+  return host
     .trim()
     .toLowerCase()
     .replace(/^https?:\/\//, '')
