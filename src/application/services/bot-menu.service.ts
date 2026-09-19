@@ -1,26 +1,16 @@
 import type { OutboundInteractiveListMessage } from '../ports/messaging-provider.port.js';
 import { currentWhatsAppAccount } from '../../infrastructure/whatsapp/tenant-whatsapp-registry.js';
+import {
+  HANDOFF_BUTTON_IDS,
+  MENU_ROW_IDS,
+  isGreeting,
+  type MenuSelection,
+} from './bot-menu.constants.js';
 
-/** list_reply.id values for the main bot menu. */
-export const MENU_ROW_IDS = {
-  CATALOG: 'catalog',
-  STORE: 'store',
-  HANDOFF: 'handoff',
-  CONTACT: 'contact',
-} as const;
-
-export type MenuSelection = (typeof MENU_ROW_IDS)[keyof typeof MENU_ROW_IDS];
-
-/** button_reply.id values for interactive handoff confirmation. */
-export const HANDOFF_BUTTON_IDS = {
-  YES: 'handoff_yes',
-  NO: 'handoff_no',
-} as const;
+export { HANDOFF_BUTTON_IDS, MENU_ROW_IDS, isGreeting };
+export type { MenuSelection };
 
 const MENU_KEYWORD_PATTERN = /\b(men[uú]|menu|opciones)\b/i;
-
-const GREETING_PATTERN =
-  /^(hola|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|hi|hello|hey|ola|qué tal|que tal|buen\s*d[ií]a)[\s!?.]*$/i;
 
 /** Fixed welcome message from knowledge_base.md — do not modify. */
 export const NM_WELCOME_MESSAGE =
@@ -48,10 +38,6 @@ function storeUrl(): string {
     ? (process.env['STORE_URL'] ?? 'https://novedadesmaritex.net.pe')
     : '';
   return (fromTenant || fallback).replace(/\/$/, '');
-}
-
-export function isGreeting(text: string): boolean {
-  return GREETING_PATTERN.test(text.trim());
 }
 
 export function isMainMenuTrigger(text: string, _isFirstMessage: boolean): boolean {

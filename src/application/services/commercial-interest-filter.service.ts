@@ -1,30 +1,22 @@
 import type { Conversation } from '../../domain/entities/conversation.entity.js';
-import { isGreeting, MENU_ROW_IDS } from './bot-menu.service.js';
-import { parseB2bQuoteMessage } from './ecommerce-b2b-quote.service.js';
-import { parseAllPdpPurchaseIntents, parsePdpPurchaseMessage } from './ecommerce-pdp-purchase.service.js';
-import { isExplicitHandoffRequest } from './handoff-detection.service.js';
 
 /** Gambling, scams and common international spam (incl. Indonesian / SEA). */
 const SPAM_PATTERN =
   /\b(casino|jud[ií]|apuesta|betting|slot|poker|togel|situs|judi|bodong|kapok|namanya\s+jp|akun\s+bodong|main\s+di\s+situs|free\s+money|crypto\s+signal|forex\s+signal|whatsapp\s+group|join\s+group|click\s+here|claim\s+now|bonus\s+deposit)\b/i;
 
+/** Distinctive SEA/Indonesian tokens only — short words like "min"/"bos" collide with Spanish retail chat. */
 const FOREIGN_SPAM_PATTERN =
-  /\b(ga|gak|ngga|nnti|akun|kapok|situs|namanya|bodong|wkwk|anjir|gue|lu|loh|dong|nih|banget|kak|min|bos)\b/i;
+  /\b(gak|ngga|nnti|akun|kapok|situs|namanya|bodong|wkwk|anjir|gue|banget)\b/i;
 
-/**
- * Strict retail signals only — no vague intent words (quiero, info, hola, etc.).
- * User must mention products, store, prices, categories or Maritex by name.
- */
-const STRICT_COMMERCIAL_PATTERN =
-  /\b(maritex|novedadesmaritex|ropa|polos?|pantal[oó]n|vestidos?|blusas?|shorts?|casacas?|chompas?|moda|talla|precio|costos?|cu[aá]nto\s+cuesta|catalogo|cat[aá]logo|productos?|modelos?|stock|disponible|oferta|descuento|promoci[oó]n|tienda\s+online|tienda|comprar|compra|pedidos?|env[ií]os?|delivery|entrega|recojo|ni[nñ]os?|ni[nñ]as?|joven|jóvenes|se[nñ]oritas?|adultos?\s+mayor|beb[eé]s?|familia|caballero|dama|mujer|hombre|horarios?|ubicaci[oó]n|direcci[oó]n|sucursal|cotizaci[oó]n|mayoreo|wholesale|por\s+mayor|venta\s+al\s+por\s+mayor)\b/i;
+const MENU_INTERACTIVE_IDS = new Set(['catalog', 'store', 'handoff', 'contact']);
 
 const CATEGORY_SELECTION_PATTERN = /^[1-4]\s*$/;
 
-const NM_ECOMMERCE_TOKEN_PATTERN = /\[NM-(?:PDP|B2B):/i;
-
 const URL_ONLY_PATTERN = /^https?:\/\/\S+$/i;
 
-const MIN_COMMERCIAL_MESSAGE_LENGTH = 6;
+/** Keep in sync with bot-menu.constants.ts — inlined so unit tests can load this file from source. */
+const GREETING_PATTERN =
+  /^(hola|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|hi|hello|hey|ola|qué tal|que tal|buen\s*d[ií]a)(?:[\s!?.¡¿]|[\p{Extended_Pictographic}\p{Emoji_Presentation}])*$/iu;
 
 function combinedText(content: string, caption?: string): string {
   return [content, caption].filter(Boolean).join(' ').trim();
@@ -47,31 +39,8 @@ export function isSuspiciousInboundText(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed) return true;
   if (URL_ONLY_PATTERN.test(trimmed)) return true;
-  if (isGreeting(trimmed)) return true;
-  if (/^[\d\s\p{P}\p{S}]+$/u.test(trimmed)) return true;
   if (hasLowLatinRatio(trimmed)) return true;
-  if (trimmed.length < MIN_COMMERCIAL_MESSAGE_LENGTH && !STRICT_COMMERCIAL_PATTERN.test(trimmed)) {
-    return true;
-  }
   return false;
-}
-
-export function hasCommercialInterest(text: string): boolean {
-  const trimmed = text.trim();
-  if (!trimmed) return false;
-
-  if (NM_ECOMMERCE_TOKEN_PATTERN.test(trimmed)) return true;
-  if (parsePdpPurchaseMessage(trimmed)) return true;
-  if (parseAllPdpPurchaseIntents(trimmed).length > 0) return true;
-  if (parseB2bQuoteMessage(trimmed)) return true;
-  if (isExplicitHandoffRequest(trimmed)) return true;
-  if (STRICT_COMMERCIAL_PATTERN.test(trimmed)) return true;
-
-  return false;
-}
-
-function conversationHasBotEngagement(conversation: Conversation): boolean {
-  return conversation.messages.some((message) => message.role === 'assistant');
 }
 
 export function isCommercialInterestFilterEnabled(): boolean {
@@ -88,17 +57,16 @@ export interface InboundCommercialFilterInput {
 }
 
 /**
- * Strict gate: cold contacts must show clear retail interest.
- * Ongoing chats (after a bot reply) stay open, except obvious spam.
+ * Spam/foreign/URL gate only. Real customers (hola, consultas vagas, follow-ups)
+ * must always get a reply — requiring retail keywords made the bot go silent.
  */
 export function shouldBotRespondToInbound(input: InboundCommercialFilterInput): boolean {
   if (!isCommercialInterestFilterEnabled()) return true;
 
   const text = combinedText(input.content, input.caption);
 
-  if (input.interactiveReplyId) {
-    const menuIds = Object.values(MENU_ROW_IDS) as string[];
-    if (menuIds.includes(input.interactiveReplyId)) return true;
+  if (input.interactiveReplyId && MENU_INTERACTIVE_IDS.has(input.interactiveReplyId)) {
+    return true;
   }
 
   const conversation = input.conversation;
@@ -107,21 +75,8 @@ export function shouldBotRespondToInbound(input: InboundCommercialFilterInput): 
 
   if (!text) return false;
   if (isLikelySpam(text)) return false;
-
-  // Saludos iniciales (ej. "Hola") deben llegar al mensaje de bienvenida de Malu.
-  const trimmed = text.trim();
-  if (isGreeting(trimmed)) {
-    if (!conversation || !conversationHasBotEngagement(conversation)) {
-      return true;
-    }
-  }
-
-  if (conversation && conversationHasBotEngagement(conversation)) {
-    if (CATEGORY_SELECTION_PATTERN.test(text)) return true;
-    if (isSuspiciousInboundText(text)) return false;
-    return true;
-  }
-
+  if (GREETING_PATTERN.test(text.trim())) return true;
+  if (CATEGORY_SELECTION_PATTERN.test(text)) return true;
   if (isSuspiciousInboundText(text)) return false;
-  return hasCommercialInterest(text);
+  return true;
 }

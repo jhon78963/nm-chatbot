@@ -133,7 +133,7 @@ function tenantBrainSystemPrompt(): string {
     (knowledge
       ? `Conocimiento de la tienda:\n${knowledge}\n`
       : 'No tienes el catálogo ni el knowledge_base de Maritex.\n') +
-    'Nunca inventes precios ni stock. Si no tienes la información o el usuario pide un asesor, responde EXCLUSIVAMENTE el token: HANDOFF_TRIGGER'
+    'Si el usuario saluda o hace una pregunta general, responde de forma amable y pregunta en qué puedes ayudar. Nunca inventes precios ni stock. Solo responde EXCLUSIVAMENTE el token HANDOFF_TRIGGER cuando pregunte precios, stock, catálogo o pida un asesor y no tengas esa información.'
   );
 }
 
@@ -143,7 +143,7 @@ function fallbackSystemPrompt(): string {
   if (account && !account.isPlatform) {
     return (
       `Eres ${name}, asistente virtual. Responde de manera concisa, amable y en el mismo idioma que el usuario. Usa texto plano sin markdown porque el canal es WhatsApp. ` +
-      'REGLA CRITICA: Cuando no tengas informacion suficiente o el usuario pida hablar con un asesor, tu respuesta debe ser EXCLUSIVAMENTE el token: HANDOFF_TRIGGER — sin ningún texto antes ni después.'
+      'Si el usuario saluda o hace una pregunta general, responde de forma amable. Nunca inventes precios ni stock. Solo responde EXCLUSIVAMENTE el token HANDOFF_TRIGGER cuando pregunte precios, stock, catálogo o pida un asesor y no tengas esa información.'
     );
   }
   return (
@@ -881,24 +881,21 @@ export class HandleIncomingMessageUseCase {
     }
 
     const structured = parseStructuredAiResponse(outboundRaw);
-    const outboundText = structured.message
+    let outboundText = structured.message
       .replace(/\s*<<HANDOFF_TRIGGER>>\s*$/g, '')
       .replace(/\s*HANDOFF_TRIGGER\s*$/g, '')
       .trim();
     const effectiveCategory = purchaseCategory ?? structured.purchaseCategory;
 
     if (!outboundText) {
-      logger.warn('[HandleIncomingMessage] AI returned empty reply — skipping outbound message', {
+      outboundText = isFirstMessage
+        ? getWelcomeMessage()
+        : `Disculpa, no pude armar una respuesta. ¿En qué te puedo ayudar? Escribe *menú* para ver opciones.`;
+      logger.warn('[HandleIncomingMessage] AI returned empty reply — sending fallback', {
         conversationId: conversation.id,
         phone: phoneNumberValue,
         model: aiModel,
       });
-      return {
-        conversationId: conversation.id,
-        userMessageId: userMessage.id.value,
-        aiResponseId: '',
-        aiResponseContent: '',
-      };
     }
 
     const assistantMessage = Message.create({
